@@ -33,11 +33,12 @@ We have enough math to implement v0. We do not have a theorem—or experimental 
 For v0, use this precedence:
 
 1. `INTERACTION_MODEL_V0.md` — exact user-action semantics;
-2. `V0_ALGORITHM_SPEC.md` — exact online optimizer and noise policy;
-3. `PERSISTENT_PREFERENCE_ATLAS.md` — durable multimodal preference memory;
-4. `ARCHITECTURE.md` — system boundaries and deployment;
-5. `CODE_DESIGN.md` — proposed package and contract shapes;
-6. `UI_DESIGN.md` and `RESEARCH_NOTES.md` — rationale and exploratory context.
+2. `STATE_AND_CONTROL_CONTRACT.md` — world, design, branch, control-basis, and snapshot identities;
+3. `V0_ALGORITHM_SPEC.md` — exact online optimizer and noise policy;
+4. `PERSISTENT_PREFERENCE_ATLAS.md` — durable multimodal preference memory;
+5. `ARCHITECTURE.md` — system boundaries and deployment;
+6. `CODE_DESIGN.md` — proposed package and contract shapes;
+7. `UI_DESIGN.md` and `RESEARCH_NOTES.md` — rationale and exploratory context.
 
 When an older document presents alternatives, the normative v0 documents select one.
 
@@ -54,8 +55,17 @@ When an older document presents alternatives, the normative v0 documents select 
 - reroll means the anchor wins against meaningfully exposed candidates;
 - early reroll with insufficient exposure is a non-learning skip;
 - New world is a stochastic reset, not a downvote;
-- history is last ten committed designs over an immutable branch forest;
+- history is last ten committed branch nodes over an immutable branch forest;
 - load-bearing condition changes create a new world.
+
+### State identity
+
+- `DesignState` contains only immutable generative provenance;
+- `BranchNode` contains navigation, local-posterior, and trust-region checkpoint identity;
+- candidate designs may exist and be favorited without becoming branch nodes;
+- history stores branch-node IDs;
+- favorites store design-state IDs;
+- learner updates never mutate a design-state digest.
 
 ### Local optimization
 
@@ -79,15 +89,17 @@ When an older document presents alternatives, the normative v0 documents select 
 - weak evidence cannot spawn a component alone;
 - dormant components persist;
 - nonzero outside-prior proposal mass is mandatory;
-- v0 uses the atlas as a proposal/guidance source, not an unvalidated action-space prior.
+- selected atlas exemplars become fixed world reference slots;
+- candidates vary declared reference-weight coordinates rather than hidden exemplar identity;
+- v0 does not initialize local weights through an unvalidated image-to-action projection.
 
 ### Seed and noise
 
 - integer seed adjacency is meaningless;
-- the exact materialized root noise is authoritative;
+- exact materialized root noise is authoritative;
 - noise coordinates are disabled for the first real optimizer experiment;
-- optional later noise movement uses a bounded world-local tangent geometry;
-- New world creates independent root noise.
+- optional later noise movement uses bounded world-local tangent geometry;
+- New world creates independent root noise and a new control basis.
 
 ## 4. Remaining empirical gates
 
@@ -115,7 +127,8 @@ Pass criteria:
 - default-radius quartets are not near-duplicates;
 - coordinate changes do not routinely destroy subject/structure unless intended;
 - behavior is reproducible at fixed state;
-- every coordinate has a documented compiler path.
+- every coordinate has a documented compiler path;
+- atlas reference slots, when present, have fixed identities and bounded weight coordinates.
 
 If no model passes this gate, the product should not proceed by disguising random prompt/seed mutation as learned directions.
 
@@ -169,16 +182,34 @@ Primary metrics:
 
 The first code implementation should incorporate these additions to the earlier code design.
 
-### Design state
+### Generative design state
 
 ```python
 class DesignState(BaseModel):
-    # existing identity, runtime, conditions, root noise, assets...
+    # identity, runtime, conditions, root noise, assets...
+    world_id: str
+    parent_design_id: str | None
     absolute_action: tuple[float, ...]
     parent_delta: tuple[float, ...] | None
-    local_preference_snapshot_id: str
-    branch_search_snapshot_id: str
     control_basis_manifest_id: str
+```
+
+It does not contain local preference, trust-region, favorite, exposure, or navigation metadata.
+
+### Branch checkpoint
+
+```python
+class BranchNode(BaseModel):
+    branch_node_id: str
+    session_id: str
+    world_id: str
+    design_id: str
+    parent_branch_node_id: str | None
+    commit_event_id: str | None
+    inherited_local_preference_snapshot_id: str
+    active_local_preference_snapshot_id: str
+    branch_search_snapshot_id: str
+    world_preference_context_id: str | None
 ```
 
 ### New interaction event
@@ -209,6 +240,17 @@ class FavoriteCandidateCommand(BaseModel):
 
 Both ultimately produce a durable design-favorite event, but their command validation differs.
 
+### Control-basis manifest
+
+Add:
+
+- bounded coordinate IDs and kinds;
+- per-coordinate distance scales;
+- compiler payload digests;
+- calibration receipt IDs;
+- zero, one, or two fixed atlas reference slots;
+- immutable world-level digest.
+
 ### Persistent-atlas contracts
 
 Add:
@@ -216,7 +258,7 @@ Add:
 - `PreferenceEvidence`;
 - `PreferenceComponent`;
 - `PersistentPreferenceSnapshot`;
-- `BranchPreferenceContext`;
+- `WorldPreferenceContext`;
 - provisional weak-evidence cluster storage;
 - evidence-retraction/rebuild support.
 
@@ -240,12 +282,13 @@ optimizer convergence receipt
 Add:
 
 ```text
-anchor_design_id
-anchor_absolute_action
+parent branch-node ID
+anchor design ID
+anchor absolute action
+proposed absolute action and parent delta
 exposed-choice eligibility
 atlas component IDs
-atlas exemplar IDs
-atlas guidance compilation receipt
+fixed atlas reference-slot IDs
 role fallback reason
 planner RNG state
 ```
@@ -259,7 +302,7 @@ Scope:
 - Python/TypeScript workspace tooling;
 - schemas and generated TypeScript types;
 - pure domain events and commands;
-- session/world/design/round reducers;
+- world/design/branch/round reducers;
 - event-store interface;
 - semantic hashing;
 - deterministic fake renderer;
@@ -271,8 +314,9 @@ Acceptance:
 
 - all domain invariants have unit/property tests;
 - schemas round-trip between Python and TypeScript;
-- replayable fake design states are content-addressed;
-- events reconstruct projections deterministically.
+- fake design states are content-addressed and replayable;
+- events reconstruct projections deterministically;
+- learner/search metadata cannot change a design-state digest.
 
 ### PR 2 — complete interaction shell
 
@@ -285,7 +329,7 @@ Scope:
 - current/candidate favorites;
 - reroll versus skip semantics;
 - New world;
-- last-ten restore/fork;
+- last-ten branch restore/fork;
 - SSE stream with stale-round rejection;
 - Playwright tests using fake renderer.
 
@@ -303,6 +347,7 @@ Scope:
 - model/runtime/capability manifests;
 - materialized root noise;
 - absolute action compiler;
+- world construction with fixed atlas reference slots;
 - low-resolution preview and finalization;
 - batch-of-four measurements;
 - basis-sweep notebook/script and receipts.
@@ -311,7 +356,8 @@ Acceptance:
 
 - Gates A, B, and C pass;
 - failed capabilities produce typed refusals;
-- no model-specific fields leak into product events.
+- no model-specific fields leak into product events;
+- no candidate uses undeclared prompt/reference changes.
 
 ### PR 4 — local optimizer
 
@@ -320,7 +366,7 @@ Scope:
 - quadratic feature map;
 - multinomial anchor-choice likelihood;
 - Laplace update;
-- branch-specific snapshot inheritance;
+- branch-node snapshot inheritance;
 - trust region;
 - Sobol/Gaussian pool;
 - four proposal roles;
@@ -340,7 +386,7 @@ Scope:
 - evidence ledger and retraction;
 - online components and provisional buffer;
 - favorites/exports/revisits/commits weighting;
-- component guidance compilation;
+- world-context and fixed-exemplar selection;
 - outside-prior proposal policy;
 - export/deletion/privacy flows.
 
@@ -348,7 +394,8 @@ Acceptance:
 
 - all atlas tests pass;
 - Gate E is reported honestly;
-- no cross-user use without consent.
+- no cross-user use without consent;
+- atlas-guided candidates map only to declared world coordinates.
 
 ### PR 6 — integrated research release
 
@@ -378,7 +425,10 @@ package.json
 packages/contracts/schemas/
   commands.json
   events.json
-  state.json
+  world.json
+  design.json
+  branch.json
+  round.json
   renderer.json
   preference.json
 
@@ -386,7 +436,10 @@ python/art_optimizer/domain/
   ids.py
   commands.py
   events.py
-  state.py
+  world.py
+  design.py
+  branch.py
+  rounds.py
   reducers.py
   hashing.py
 
@@ -412,7 +465,7 @@ apps/web/src/state/
 apps/web/src/test/
 ```
 
-The fake renderer should generate deterministic geometric images from the semantic state digest so the entire interaction can be visually tested without pretending those images validate the real model.
+The fake renderer should generate deterministic geometric images from the generative state digest so the entire interaction can be visually tested without pretending those images validate the real model.
 
 ## 8. Test strategy
 
@@ -422,6 +475,7 @@ The fake renderer should generate deterministic geometric images from the semant
 - idempotency and optimistic concurrency;
 - immutable branch/fork behavior;
 - exact projection rebuild;
+- design-state versus branch-node identity;
 - favorite evidence retraction;
 - reroll versus skip distinction.
 
@@ -441,14 +495,18 @@ The fake renderer should generate deterministic geometric images from the semant
 - rebuild from evidence;
 - incompatible feature revisions;
 - outside-prior mass;
+- world-context selection probabilities;
+- fixed exemplar/reference identity;
 - proposal-component provenance.
 
 ### Renderer
 
-- capability preflight;
+- world compilation;
+- absolute-action capability preflight;
 - replay across restart;
 - batch isolation;
 - typed refusal;
+- rejection of hidden candidate-specific conditions;
 - artifact durability before exposure.
 
 ### UI
@@ -458,7 +516,7 @@ The fake renderer should generate deterministic geometric images from the semant
 - candidate-favorite event propagation;
 - stale stream handling;
 - partial exposure choice sets;
-- history restore and fork;
+- history branch-node restore and fork;
 - failure states.
 
 ## 9. Risk register
@@ -466,9 +524,11 @@ The fake renderer should generate deterministic geometric images from the semant
 | Risk | Consequence | Mitigation |
 |---|---|---|
 | No smooth real control basis | Optimizer learns noise, not useful direction | Make Gate B blocking; benchmark models/adapters |
+| Absolute controls are too restrictive for an edit model | Attractive model cannot join v0 optimizer | Keep parent-relative adapter as separate experiment; do not mix semantics |
 | Fixed root feels repetitive | User rerolls often despite correct learner | Enable bounded tangent-noise role after gate |
 | Atlas proliferates components | Personalization becomes unstable | Strong-only spawn, provisional weak buffer, no online split |
 | Atlas collapses novelty | Every world looks the same | Mandatory outside-prior mass and dedicated surprise slot |
+| Hidden atlas guidance leaks outside action vector | Choice model becomes statistically incoherent | Fixed world reference slots and typed refusal |
 | Quadratic utility underfits | Slow convergence | Versioned RFF/GP replacement after baseline |
 | Corner thumbnails are too small | Poor choices despite good candidates | Responsive overlay sizing and 2×2 fallback experiment |
 | Low-res choices reverse at final | Corrupt preference labels | Measure agreement; delay preference or use final confirmation if needed |
@@ -486,8 +546,10 @@ The fake renderer should generate deterministic geometric images from the semant
 - **Does selection mean permanent taste?** Primarily local; persistent weight is small.
 - **Can favorite differ from branch choice?** Yes, through an explicit candidate-favorite target.
 - **Which local learner ships first?** Bayesian quadratic discrete choice with Laplace posterior.
-- **Does the atlas initialize local weights directly?** Not in v0; it supplies proposals/guidance.
+- **Does the atlas initialize local weights directly?** Not in v0; it chooses fixed world coordinates and proposal roles.
+- **Can candidates secretly use different references?** No.
 - **Does a prompt/reference change mutate the current branch?** No; it creates a new world.
+- **Where do learner snapshots live?** On branch checkpoints, not design states.
 
 ## 11. Questions intentionally left to experiments
 
