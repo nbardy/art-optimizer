@@ -21,6 +21,8 @@ branch-local posterior
 
 The atlas persists. A world chooses a context-dependent mixture over it. A branch-local optimizer then learns a temporary residual goal.
 
+Generation integration must obey `STATE_AND_CONTROL_CONTRACT.md`: atlas exemplar identities are fixed when a world is created, and candidates vary only declared world coordinates.
+
 ## 2. Why one vector is insufficient
 
 A user may separately prefer:
@@ -74,21 +76,19 @@ The normalized base mixture weight is:
 
 ### 3.1 Feature space
 
-The atlas does not store raw, timeless CLIP vectors. Each evidence image receives a versioned feature bundle, then a fixed projection produces the atlas vector:
+The atlas does not store raw, timeless CLIP vectors. Each evidence image receives a versioned feature bundle, then a fixed whitening/projection produces the atlas vector:
 
 \[
-x=\operatorname{normalize}
-\left(
+x=
 W_{\phi}
 [\phi_{\mathrm{semantic}};
  \phi_{\mathrm{style}};
- \phi_{\mathrm{composition}}]
-\right).
+ \phi_{\mathrm{composition}}].
 \]
 
-The projection and all source encoders have immutable revisions. A new feature-space revision creates a new atlas projection or an explicit migration; it never silently mixes incompatible vectors.
+The projection may include centering, whitening, dimensionality reduction, and clipping. It must not silently change. The projection and all source encoders have immutable revisions. A new feature-space revision creates a new atlas projection or an explicit migration; it never mixes incompatible vectors.
 
-V0 may use a PCA-whitened Euclidean representation with diagonal covariance. A later implementation may use a spherical or learned density model behind the same snapshot contract.
+V0 uses a PCA-whitened Euclidean representation with diagonal covariance. Cosine-normalized copies may be used for retrieval, but Gaussian component updates operate in the declared Euclidean feature space.
 
 ## 4. Evidence is event-sourced
 
@@ -203,16 +203,15 @@ M_{2,k}
 q(x-\mu_k)\odot(x-\mu_k').
 \]
 
-The diagonal covariance estimate is:
+With prior variance \(v_0\) and shrinkage mass \(\lambda_v\), estimate:
 
 \[
 v_k'
 =
 \operatorname{clip}
 \left(
-\frac{M_{2,k}'}{\max(N_k',\epsilon)}
-+
-\lambda_v v_0,
+\frac{M_{2,k}'+\lambda_v v_0}
+{\max(N_k'+\lambda_v,\epsilon)},
 \,v_{\min},v_{\max}
 \right).
 \]
@@ -276,47 +275,50 @@ This relevance vector is stored in an immutable `WorldPreferenceContext` or `Bra
 
 ## 9. How the atlas affects generation in v0
 
-The atlas is a proposal source, not a magic scalar added to every unseen candidate.
+The atlas is a world-construction and proposal source, not a magic scalar added to every unseen candidate.
 
-Before a learned action-to-image surrogate exists, the system cannot honestly evaluate
+Before a learned action-to-image surrogate exists, the system cannot honestly evaluate:
 
 \[
 m_u(G(s,a))
 \]
 
-without rendering \(G(s,a)\). V0 therefore integrates persistent taste through explicit proposal policies:
+without rendering \(G(s,a)\). V0 therefore integrates persistent taste through declared world controls.
 
-1. retrieve one or more relevant atlas components;
-2. select representative exemplars;
-3. compile bounded exemplar guidance through the renderer capability interface;
-4. allocate a candidate slot to that guided proposal;
-5. record the component IDs, exemplar IDs, guidance strength, and proposal probability.
+At world creation:
 
-Preferred compilation order:
+1. retrieve context-relevant atlas components;
+2. choose zero, one, or two representative exemplars;
+3. ask the renderer to install those exemplar identities as fixed reference slots in the `ControlBasisManifest`;
+4. assign bounded action coordinates to their weights;
+5. record component IDs, exemplar IDs, selection probabilities, and capability receipts.
 
-1. multi-reference or reference-attention guidance;
-2. a compatible, previously learned control recipe under the same renderer/control-basis revision;
-3. oversample-and-rerank after low-resolution rendering;
-4. typed refusal and fallback to controlled surprise.
+Inside that world, candidates may vary only the declared reference-weight coordinates. They may not silently swap exemplar identity, prompt, adapter, or reference set per candidate.
 
-The adapter must not silently pretend a component was used when no supported guidance path exists.
+If a relevant component was not installed in the world basis, v0 may:
+
+1. start a new world whose basis includes it;
+2. use it in a separate oversample-and-rerank experiment with complete candidate provenance;
+3. fall back to controlled surprise.
+
+A typed renderer refusal is preferable to fake atlas guidance.
 
 ### 9.1 First round in a new world
 
-When an atlas exists, the first quartet should contain:
+When atlas reference slots exist, the first quartet should contain:
 
 1. a neutral continuation from the new stochastic root;
-2. guidance from the most context-relevant preference component;
-3. guidance from a distinct secondary or dormant component;
+2. increased weight on the most relevant installed component;
+3. increased weight on a distinct secondary/dormant installed component;
 4. an outside-prior surprise proposal.
 
-After branch-local evidence accumulates, only one slot normally comes directly from the atlas. The other slots are governed by the local optimizer.
+After branch-local evidence accumulates, normally only one candidate role deliberately exercises atlas coordinates. The local optimizer owns the other roles.
 
 ### 9.2 Within, crossover, and outside proposals
 
-- **Within-prior:** one component guides the proposal.
-- **Crossover:** two compatible components guide a proposal with explicit bounded weights.
-- **Outside-prior:** no component guidance; optimize novelty subject to quality and safety constraints.
+- **Within-prior:** increase one installed component's reference-weight coordinate.
+- **Crossover:** vary two installed component coordinates with explicit bounded weights.
+- **Outside-prior:** keep atlas coordinates neutral and optimize novelty subject to quality and safety constraints.
 
 Crossover is never implemented by blindly averaging all component means.
 
@@ -326,13 +328,13 @@ The branch-local posterior and atlas are distinct models with distinct evidence.
 
 ```text
 atlas
-    says which durable taste regions may be relevant
+    says which durable taste regions may deserve declared world coordinates
 
 local posterior
     says which absolute control coordinates are improving this branch now
 ```
 
-V0 combines them at the proposal-policy level. It does **not** initialize the local utility weight vector from an unvalidated projection of image-embedding means into generator action space.
+V0 combines them through world-basis construction and proposal roles. It does **not** initialize the local utility weight vector from an unvalidated projection of image-embedding means into generator action space.
 
 A later learned transport model may provide:
 
@@ -379,16 +381,17 @@ class PersistentPreferenceSnapshot(BaseModel):
     outside_prior_mass: float
     created_at: str
 
-class BranchPreferenceContext(BaseModel):
+class WorldPreferenceContext(BaseModel):
     context_id: str
     snapshot_id: str
-    anchor_design_id: str
     component_responsibilities: dict[str, float]
     selected_component_ids: tuple[str, ...]
+    selected_exemplar_design_ids: tuple[str, ...]
+    selection_probabilities: dict[str, float]
     policy_revision: str
 ```
 
-Every candidate proposed from a component records the atlas snapshot and branch-context IDs used.
+Every world and candidate proposed through atlas coordinates records the atlas snapshot, world context, component, exemplar, and fixed reference-slot IDs used.
 
 ## 13. Privacy and user control
 
@@ -411,12 +414,14 @@ At minimum:
 4. updates are order-stable within numeric tolerance;
 5. unstar retracts only the favorite contribution;
 6. components become dormant without losing evidence;
-7. new world preserves the atlas snapshot lineage;
+7. New world preserves atlas snapshot lineage;
 8. reroll does not mutate the atlas;
 9. outside-prior mass remains nonzero;
 10. incompatible feature revisions cannot be mixed;
-11. proposal records identify the component and exemplar actually used;
-12. rebuilding from active evidence reproduces the snapshot.
+11. world creation records selected component/exemplar probabilities;
+12. every atlas-guided candidate maps to fixed world coordinates;
+13. exemplar identity cannot change inside a world;
+14. rebuilding from active evidence reproduces the snapshot.
 
 ## 15. Deferred upgrades
 
@@ -428,4 +433,4 @@ At minimum:
 - user-visible naming, pinning, merging, and splitting of taste modes;
 - offline LoRA/DPO consolidation.
 
-These upgrades should replace atlas internals or add proposal sources without changing the meaning of commit, reroll, favorite, restore, or New world.
+These upgrades should replace atlas internals or add world-construction policies without changing the meaning of commit, reroll, favorite, restore, or New world.
