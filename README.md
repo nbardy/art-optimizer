@@ -43,6 +43,7 @@ Use this precedence when documents differ:
 3. [V0 algorithm specification](docs/V0_ALGORITHM_SPEC.md) — absolute world controls, choice likelihood, Laplace posterior, trust region, candidate roles, and noise policy.
 4. [Persistent preference atlas](docs/PERSISTENT_PREFERENCE_ATLAS.md) — evolving multimodal preference components, evidence, lifecycle, world-context selection, and generation guidance.
 5. [Implementation readiness](docs/IMPLEMENTATION_READINESS.md) — locked decisions, remaining empirical gates, contract deltas, and implementation sequence.
+6. [Control-basis experiment](docs/CONTROL_BASIS_EXPERIMENT.md) — the blocking benchmark for choosing real model controls, bounds, calibration, and latency.
 
 ## Proposed model substrate
 
