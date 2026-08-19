@@ -5,7 +5,7 @@
 
 This document removes the remaining “Bayesian linear **or** GP,” “fixed **or** varied noise,” and “prior score **or** proposal source” ambiguity from the first implementation.
 
-Where this document conflicts with exploratory language in `RESEARCH_NOTES.md`, `ARCHITECTURE.md`, or `CODE_DESIGN.md`, this document governs v0 behavior.
+`STATE_AND_CONTROL_CONTRACT.md` governs the identity of worlds, design states, branch nodes, and control coordinates. Where this document conflicts with exploratory language in `RESEARCH_NOTES.md`, `ARCHITECTURE.md`, or `CODE_DESIGN.md`, this document governs v0 algorithm behavior.
 
 ## 1. V0 objective
 
@@ -42,17 +42,19 @@ where:
 - \(m\): exact model/runtime manifest;
 - \(z_0\): materialized world root noise;
 - \(c\): base text/structural conditions;
-- \(r\): reference inputs;
+- \(r\): fixed world reference identities, including any atlas slots;
 - \(q\): output constraints and preservation locks;
 - \(B\): versioned control-basis manifest;
 - \(a\): absolute world coordinates.
 
 The absolute-coordinate requirement is important: observations from several rounds remain comparable in one parameterized design space. A parent-relative editing adapter that cannot compile an absolute world coordinate is outside the normative v0 optimizer and must use a separate experimental policy.
 
-Each `DesignState` stores both:
+Each `DesignState` stores:
 
 - `absolute_action = a_t`;
 - `parent_delta = a_t-a_parent`.
+
+Local posterior and trust-region snapshots belong to the committed `BranchNode`, not the immutable `DesignState`.
 
 ## 3. Control-basis gate
 
@@ -138,7 +140,7 @@ A candidate is meaningfully exposed when:
 - a valid preview was ready;
 - at least 50% of the candidate card was visible;
 - it was visible for at least 300 ms;
-- or it was explicitly previewed/selected.
+- or it was explicitly previewed, favorited, or selected.
 
 A reroll with fewer than two meaningfully exposed candidates becomes `RoundSkipped` and has no preference weight.
 
@@ -249,7 +251,7 @@ $$
 
 Use damped Newton/IRLS with:
 
-- warm start from the prior snapshot mode;
+- warm start from the inherited branch snapshot mode;
 - maximum 10 iterations;
 - backtracking line search;
 - Hessian jitter \(\epsilon I\);
@@ -269,11 +271,11 @@ Snapshots are immutable. A round uses only a snapshot completed before that roun
 
 ### 7.1 Branch inheritance
 
-Every committed design stores the local-posterior snapshot associated with its ancestral observation path.
+Every committed `BranchNode` points to the local-posterior snapshot associated with its ancestral observation path.
 
-Restoring an old design restores that snapshot. New descendants inherit observations along that path only; they do not inherit contradictory observations from sibling branches.
+Restoring an old branch node restores that snapshot. New descendants inherit observations along that path only; they do not inherit contradictory observations from sibling branches.
 
-New world initializes a fresh zero-mean local posterior. The persistent atlas influences proposals, not the v0 local weight prior.
+New world initializes a fresh zero-mean local posterior. The persistent atlas influences fixed world coordinates and proposal roles, not the v0 local weight prior.
 
 ## 8. Predictive mean and uncertainty
 
@@ -324,7 +326,7 @@ Behavior:
 - commit moves the center to the selected absolute action;
 - after two consecutive commits, shrink radius by `0.85` and reset the success counter;
 - soft reroll expands by `1.35`, resets the success counter, and raises exploration pressure;
-- restore reloads the radius/search snapshot stored at that design;
+- restore reloads the search snapshot stored on the branch node;
 - New world resets to the initial radius.
 
 The user never silently crosses into a new stochastic world because of trust-region expansion.
@@ -336,7 +338,7 @@ For each round, generate a deterministic hidden action pool using the planner RN
 1. 192 scrambled Sobol proposals in the trust region;
 2. 64 Gaussian proposals centered on \(a_t\), clipped to bounds;
 3. axis probes along the largest posterior-variance eigendirections when available;
-4. optional proposals compiled from the persistent atlas.
+4. proposals emphasizing any fixed atlas reference-weight coordinates installed in the world basis.
 
 Remove candidates that:
 
@@ -346,6 +348,8 @@ Remove candidates that:
 - fail preservation-lock preflight.
 
 V0 optimizes this finite pool. It does not require fragile continuous acquisition-function optimization.
+
+No candidate may change the world's fixed prompt, reference identities, adapter identities, or control basis.
 
 ## 11. Four proposal roles
 
@@ -386,7 +390,7 @@ This is an inexpensive uncertainty proxy; exact expected information gain is def
 
 ### Slot 4 — persistent mode or controlled surprise
 
-If the persistent atlas can compile a relevant component through the renderer, choose a bounded prior-guided proposal distinct from the first three.
+If the world control basis contains atlas reference-weight coordinates, choose a distinct proposal that exercises the most relevant underexplored installed component or a bounded crossover between two installed components.
 
 Otherwise choose a controlled-surprise point maximizing:
 
@@ -396,18 +400,18 @@ $$
 
 subject to a maximum jump and preservation constraints.
 
-The role and fallback reason are stored. The UI need not label slots by role.
+The role, fixed atlas coordinate IDs, component IDs, and fallback reason are stored. The UI need not label slots by role.
 
 ### 11.1 First round special case
 
 With no branch observations:
 
 1. neutral low-distance proposal;
-2. most relevant persistent component;
-3. distinct secondary/dormant component or broad control probe;
+2. increased weight on the most relevant installed atlas component;
+3. increased weight on a distinct secondary/dormant installed component or broad control probe;
 4. outside-prior surprise.
 
-If the atlas is empty, use four deterministic, well-separated basis probes.
+If the atlas is empty or the renderer installed no atlas slots, use four deterministic, well-separated basis probes.
 
 ## 12. Perceptual duplicate handling
 
@@ -443,54 +447,57 @@ A commit:
 
 1. validates that the candidate belongs to the active round;
 2. records the exposed choice set plus anchor;
-3. atomically advances the branch pointer to the candidate's immutable `DesignState`;
-4. updates the local posterior asynchronously from the typed observation;
-5. adds weak commit evidence to the persistent-atlas event stream;
-6. generates the next round from the selected absolute action.
+3. atomically creates a new `BranchNode` pointing to the candidate's immutable `DesignState`;
+4. advances the current branch pointer;
+5. queues the local-posterior update from the typed observation;
+6. adds weak commit evidence to the persistent-atlas event stream;
+7. generates the next round from the selected absolute action using the latest completed branch snapshot available.
 
-The next round may initially use the previous local snapshot if the update misses the latency deadline; the round records exactly which snapshot was used.
+The learner update never mutates the selected `DesignState`. When it completes, its snapshot is attached to the branch-node projection and is used only by later rounds that record that snapshot ID.
 
 ## 15. New world
 
 New world:
 
-1. retains prompt, references, output settings, favorites, and the persistent atlas by default;
-2. draws and materializes independent root noise;
-3. constructs a new control basis and action origin;
-4. resets branch observations and trust-region state;
-5. creates a neutral root design;
-6. uses the atlas in the first quartet rather than silently forcing the root toward one taste component.
+1. retains prompt intent, output settings, favorites, and the persistent atlas by default;
+2. computes a context-dependent atlas mixture;
+3. selects zero, one, or two fixed atlas exemplars for supported world reference slots;
+4. constructs an immutable control-basis manifest;
+5. draws and materializes independent root noise;
+6. resets branch observations and trust-region state;
+7. creates a neutral root `DesignState` and root `BranchNode`;
+8. varies declared world coordinates in the first quartet.
 
-This preserves a clean distinction between stochastic-world reset and preference conditioning.
+This preserves a clean distinction between stochastic-world reset, world basis construction, and branch-local preference learning.
 
 ## 16. Persistent-atlas integration
 
 V0 does not add a persistent image score to unseen actions unless a validated action-to-image surrogate exists.
 
-Instead, the atlas participates through candidate proposal roles and renderer-compiled exemplar guidance, as specified in `PERSISTENT_PREFERENCE_ATLAS.md`.
+Instead, the atlas participates at world creation by installing fixed exemplar-reference coordinates and later through proposal roles that vary those declared coordinates, as specified in `PERSISTENT_PREFERENCE_ATLAS.md` and `STATE_AND_CONTROL_CONTRACT.md`.
 
-This avoids pretending that image-space preference components can be projected into generator action coordinates without learned transport.
+This avoids pretending that image-space preference components can be projected into generator action coordinates without learned transport, and avoids presenting candidates with hidden incompatible conditions.
 
 ## 17. Planner pseudocode
 
 ```python
-def propose_round(state, local_snapshot, atlas_context, renderer, rng):
+def propose_round(branch, local_snapshot, world_context, renderer, rng):
     pool = sample_trust_region(
-        center=state.absolute_action,
-        radius=state.search.radius,
+        center=branch.current_absolute_action,
+        radius=branch.search.radius,
         sobol_count=192,
         gaussian_count=64,
         rng=rng,
     )
-    pool += posterior_axis_probes(local_snapshot, state.search)
-    pool += compile_atlas_proposals(atlas_context, renderer, state, rng)
+    pool += posterior_axis_probes(local_snapshot, branch.search)
+    pool += atlas_coordinate_probes(world_context, branch, rng)
 
-    pool = renderer.preflight_many(pool)
+    pool = renderer.preflight_absolute_actions(branch.world_id, pool)
     pool = dedupe_actions(pool)
 
     posterior = predict_improvement(
         local_snapshot,
-        anchor=state.absolute_action,
+        anchor=branch.current_absolute_action,
         actions=pool,
     )
 
@@ -500,16 +507,17 @@ def propose_round(state, local_snapshot, atlas_context, renderer, rng):
     fourth = atlas_or_surprise(
         pool,
         posterior,
-        atlas_context,
+        world_context,
         [first, second, third],
         rng,
     )
 
     return CandidateRound(
-        parent_design_id=state.design_id,
+        parent_branch_node_id=branch.branch_node_id,
+        parent_design_id=branch.design_id,
         proposals=[first, second, third, fourth],
         local_snapshot_id=local_snapshot.snapshot_id,
-        atlas_context_id=atlas_context.context_id,
+        world_preference_context_id=world_context.context_id,
         planner_rng_state=serialize_rng(rng),
     )
 ```
@@ -540,7 +548,7 @@ Simulated utility families must include:
 3. one selection produces one multinomial observation;
 4. soft reroll has the configured lower weight;
 5. posterior snapshots are deterministic under fixed inputs and RNG;
-6. restoring a branch restores its ancestral local snapshot;
+6. restoring a branch node restores its ancestral local snapshot;
 7. sibling-branch observations do not leak into one another;
 8. proposal roles are distinct under action-space distance constraints;
 9. outside-prior proposals remain possible;
@@ -548,7 +556,9 @@ Simulated utility families must include:
 11. optional noise movement preserves norm within tolerance;
 12. renderer refusal cannot be silently converted into a zero action;
 13. New world resets local state but preserves atlas lineage;
-14. all planner randomness is replayable from the round manifest.
+14. every atlas-guided action references fixed world coordinates;
+15. candidate-specific hidden reference identities are rejected;
+16. all planner randomness is replayable from the round manifest.
 
 ## 20. What remains empirical
 
@@ -559,7 +569,7 @@ The following are not missing mathematical definitions; they are experiments tha
 - whether fixed root noise becomes visually repetitive;
 - whether the default trust-region constants are appropriate;
 - whether the quadratic utility model is sufficient;
-- whether persistent exemplar guidance improves first-round choices;
+- whether fixed atlas-reference coordinates improve first-round choices;
 - whether corner previews provide enough information at target sizes;
 - whether low-resolution choices agree with final-render choices.
 
