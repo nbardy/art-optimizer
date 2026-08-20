@@ -16,7 +16,7 @@ from PIL import Image, ImageFilter
 _SAFE_DESIGN_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class RendererCapabilities:
     action_dimension: int
     deterministic: bool
