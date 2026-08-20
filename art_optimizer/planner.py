@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 from scipy.stats import qmc
 
-from .domain import CandidateProposal, SearchState, new_id
+from .domain import CandidateProposal, CandidateRole, SearchState, new_id
 from .preference import BayesianChoiceModel
 
 
@@ -20,7 +21,7 @@ class PlannerContext:
 class CandidatePlanner:
     """Finite-pool, role-balanced candidate planner."""
 
-    roles = (
+    roles: tuple[CandidateRole, CandidateRole, CandidateRole, CandidateRole] = (
         "best_local",
         "diverse_posterior",
         "informative_probe",
@@ -28,9 +29,13 @@ class CandidatePlanner:
     )
 
     def __init__(self, action_dimension: int = 8, pool_size: int = 1024) -> None:
+        if not 1 <= action_dimension <= 16:
+            raise ValueError("action_dimension must be between 1 and 16")
+        if pool_size < 64:
+            raise ValueError("pool_size must be at least 64")
         self.action_dimension = action_dimension
         self.pool_size = pool_size
-        self.revision = "finite-pool-four-role/v1"
+        self.revision = "finite-pool-four-role/v2"
 
     def propose(
         self,
@@ -39,17 +44,27 @@ class CandidatePlanner:
         context: PlannerContext,
         rng: np.random.Generator,
     ) -> list[CandidateProposal]:
-        pool = self._build_pool(context=context, rng=rng)
-        predictions = model.predict(pool)
+        anchor = self._validate_action(context.anchor_action, "anchor_action")
+        if model.action_dimension != self.action_dimension:
+            raise ValueError("planner and preference model dimensions do not match")
+
+        normalized_context = PlannerContext(
+            anchor_action=anchor,
+            search_state=context.search_state,
+            atlas_bias_action=self._optional_action(context.atlas_bias_action),
+            alternate_atlas_action=self._optional_action(context.alternate_atlas_action),
+        )
+        pool = self._build_pool(context=normalized_context, rng=rng)
+        predictions = model.predict_improvement(anchor, pool)
         means = predictions.mean
         stddev = np.sqrt(predictions.variance)
-        phi = model.features(pool)
-        sampled_utility = phi @ model.sample_weights(rng)
+        delta_phi = model.relative_features(anchor, pool)
+        sampled_utility = delta_phi @ model.sample_weights(rng)
 
         selected: list[int] = []
         proposals: list[CandidateProposal] = []
 
-        local_distance = np.linalg.norm(pool - context.anchor_action[None, :], axis=1)
+        local_distance = np.linalg.norm(pool - anchor[None, :], axis=1)
         local_mask = local_distance <= max(context.search_state.radius * 1.15, 0.25)
         if not np.any(local_mask):
             local_mask = np.ones(pool.shape[0], dtype=bool)
@@ -73,15 +88,20 @@ class CandidatePlanner:
         proposals.append(self._proposal(3, self.roles[2], pool[third], means[third], stddev[third]))
 
         diversity = self._distance_to_selected(pool, selected)
-        if context.alternate_atlas_action is not None:
-            target_distance = np.linalg.norm(pool - context.alternate_atlas_action[None, :], axis=1)
+        if normalized_context.alternate_atlas_action is not None:
+            target_distance = np.linalg.norm(
+                pool - normalized_context.alternate_atlas_action[None, :], axis=1
+            )
             fourth_score = -0.85 * target_distance + 0.32 * stddev + 0.28 * diversity + 0.08 * means
         else:
-            # A bounded surprise: farther than the local best, but not simply random.
+            # A bounded surprise: farther than the local best, but still informed
+            # by posterior utility and uncertainty rather than raw randomness.
             fourth_score = 0.28 * means + 0.34 * stddev + 0.48 * diversity + 0.20 * local_distance
         fourth = self._argmax_available(fourth_score, selected)
         proposals.append(self._proposal(4, self.roles[3], pool[fourth], means[fourth], stddev[fourth]))
 
+        if len({tuple(np.round(item.action, 8)) for item in proposals}) != 4:
+            raise RuntimeError("planner produced a duplicate candidate slate")
         return proposals
 
     def _build_pool(self, *, context: PlannerContext, rng: np.random.Generator) -> np.ndarray:
@@ -93,37 +113,62 @@ class CandidatePlanner:
         global_count = self.pool_size // 4
         directed_count = self.pool_size - local_count - global_count
 
-        local = anchor + rng.normal(
-            0.0,
-            radius / np.sqrt(d),
-            size=(local_count, d),
-        )
+        local = anchor + rng.normal(0.0, radius / np.sqrt(d), size=(local_count, d))
 
         power = int(np.ceil(np.log2(max(global_count, 2))))
         sobol = qmc.Sobol(d=d, scramble=True, seed=int(rng.integers(0, 2**31 - 1)))
         global_pool = sobol.random_base2(power)[:global_count] * 2.0 - 1.0
 
-        directed: list[np.ndarray] = []
-        targets = [target for target in (context.atlas_bias_action, context.alternate_atlas_action) if target is not None]
+        targets = [
+            target
+            for target in (context.atlas_bias_action, context.alternate_atlas_action)
+            if target is not None
+        ]
         if not targets:
             targets = [np.zeros(d, dtype=np.float64)]
+        directed = np.empty((directed_count, d), dtype=np.float64)
         for index in range(directed_count):
             target = targets[index % len(targets)]
-            mix = rng.uniform(0.35, 0.9)
+            mix = rng.uniform(0.35, 0.90)
             point = (1.0 - mix) * anchor + mix * target
             point += rng.normal(0.0, max(radius * 0.25, 0.06), size=d)
-            directed.append(point)
+            directed[index] = point
 
-        pool = np.vstack([local, global_pool, np.asarray(directed)])
-        pool = np.clip(pool, -1.0, 1.0)
-
-        # Do not offer the exact current anchor as a candidate.
+        pool = np.clip(np.vstack([local, global_pool, directed]), -1.0, 1.0)
         distances = np.linalg.norm(pool - anchor[None, :], axis=1)
         pool = pool[distances > 0.045]
+        pool = self._deduplicate(pool)
+
+        attempts = 0
+        while pool.shape[0] < 16 and attempts < 8:
+            fallback = np.clip(anchor + rng.normal(0.0, 0.25, size=(32, d)), -1.0, 1.0)
+            fallback = fallback[np.linalg.norm(fallback - anchor[None, :], axis=1) > 0.045]
+            pool = self._deduplicate(np.vstack([pool, fallback]))
+            attempts += 1
         if pool.shape[0] < 4:
-            fallback = anchor + rng.normal(0.0, 0.25, size=(16, d))
-            pool = np.vstack([pool, np.clip(fallback, -1.0, 1.0)])
+            raise RuntimeError("unable to construct a non-degenerate candidate pool")
         return pool
+
+    def _optional_action(self, value: np.ndarray | None) -> np.ndarray | None:
+        if value is None:
+            return None
+        return self._validate_action(value, "atlas action")
+
+    def _validate_action(self, value: np.ndarray, name: str) -> np.ndarray:
+        action = np.asarray(value, dtype=np.float64)
+        if action.shape != (self.action_dimension,):
+            raise ValueError(f"{name} has the wrong dimension")
+        if not np.isfinite(action).all():
+            raise ValueError(f"{name} must be finite")
+        return np.clip(action, -1.0, 1.0)
+
+    @staticmethod
+    def _deduplicate(pool: np.ndarray) -> np.ndarray:
+        if pool.size == 0:
+            return pool
+        rounded = np.round(pool, decimals=10)
+        _, first_indices = np.unique(rounded, axis=0, return_index=True)
+        return pool[np.sort(first_indices)]
 
     @staticmethod
     def _distance_to_selected(pool: np.ndarray, selected: list[int]) -> np.ndarray:
@@ -147,7 +192,7 @@ class CandidatePlanner:
     @staticmethod
     def _proposal(
         slot: int,
-        role: str,
+        role: CandidateRole,
         action: np.ndarray,
         expected_utility: float,
         uncertainty: float,
@@ -155,8 +200,8 @@ class CandidatePlanner:
         return CandidateProposal(
             candidate_id=new_id("candidate"),
             slot=slot,
-            role=role,  # type: ignore[arg-type]
+            role=cast(CandidateRole, role),
             action=action.astype(float).tolist(),
             expected_utility=float(expected_utility),
-            uncertainty=float(uncertainty),
+            uncertainty=float(max(uncertainty, 0.0)),
         )
