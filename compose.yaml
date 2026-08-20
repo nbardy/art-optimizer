@@ -1,6 +1,13 @@
 services:
   art-optimizer:
     build: .
+    init: true
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     ports:
       - "${PORT:-8000}:8000"
     environment:
