@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.env
+art_optimizer.egg-info/
+.art-optimizer/
+dist/
+build/
+.DS_Store
