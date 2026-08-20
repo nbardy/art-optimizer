@@ -3,36 +3,67 @@ from __future__ import annotations
 import colorsys
 import hashlib
 import math
+import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 from PIL import Image, ImageFilter
+
+
+_SAFE_DESIGN_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+@dataclass(frozen=True, slots=True)
+class RendererCapabilities:
+    action_dimension: int
+    deterministic: bool
+    supports_batching: bool
+    renderer_revision: str
+    control_basis_revision: str
+    feature_revision: str
 
 
 @dataclass(slots=True)
 class RenderedArtifact:
     path: Path
     feature_vector: list[float]
+    digest: str
 
 
 class ProceduralRenderer:
-    """Deterministic, smooth eight-dimensional art renderer.
+    """Deterministic, smooth eight-dimensional development renderer.
 
-    This is an honest development renderer, not a diffusion-model impersonation.
-    Its global control basis is deliberately smooth so the preference learner,
-    streaming protocol, branching, replay, and atlas can run end to end on a CPU.
+    This is an honest CPU research renderer, not a diffusion-model impersonation.
+    It lets the interaction, replay, optimizer, persistence, and atlas run end to
+    end while a real image-model control basis is evaluated separately.
     """
 
-    revision = "procedural-field/v1"
+    revision = "procedural-field/v2"
     control_basis_revision = "procedural-global-8d/v1"
+    feature_revision = "procedural-features-13d/v1"
+    action_dimension = 8
 
     def __init__(self, artifacts_dir: Path, size: int = 640) -> None:
+        if not 64 <= size <= 2048:
+            raise ValueError("renderer size must be between 64 and 2048")
         self.artifacts_dir = artifacts_dir
         self.size = size
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         axis = np.linspace(-1.0, 1.0, self.size, dtype=np.float32)
         self.x, self.y = np.meshgrid(axis, axis)
+
+    def capabilities(self) -> RendererCapabilities:
+        return RendererCapabilities(
+            action_dimension=self.action_dimension,
+            deterministic=True,
+            supports_batching=False,
+            renderer_revision=self.revision,
+            control_basis_revision=self.control_basis_revision,
+            feature_revision=self.feature_revision,
+        )
 
     def render(
         self,
@@ -42,15 +73,26 @@ class ProceduralRenderer:
         prompt: str,
         action: np.ndarray,
     ) -> RenderedArtifact:
-        action = np.clip(np.asarray(action, dtype=np.float64), -1.0, 1.0)
-        if action.shape != (8,):
+        if not _SAFE_DESIGN_ID.fullmatch(design_id):
+            raise ValueError("design_id contains unsafe path characters")
+        if not 0 <= seed <= (1 << 63) - 1:
+            raise ValueError("seed is outside the supported range")
+        action = np.asarray(action, dtype=np.float64)
+        if action.shape != (self.action_dimension,):
             raise ValueError("procedural renderer expects exactly eight controls")
+        if not np.isfinite(action).all():
+            raise ValueError("renderer action must be finite")
+        action = np.clip(action, -1.0, 1.0)
 
         path = self.artifacts_dir / f"{design_id}.png"
         if path.exists():
-            image = Image.open(path).convert("RGB")
-            array = np.asarray(image, dtype=np.float32) / 255.0
-            return RenderedArtifact(path=path, feature_vector=self._features(array))
+            with Image.open(path) as stored:
+                array = np.asarray(stored.convert("RGB"), dtype=np.float32) / 255.0
+            return RenderedArtifact(
+                path=path,
+                feature_vector=self._features(array),
+                digest=self._file_digest(path),
+            )
 
         prompt_hash = int.from_bytes(hashlib.sha256(prompt.encode("utf-8")).digest()[:8], "little")
         rng = np.random.default_rng((seed ^ prompt_hash) & ((1 << 63) - 1))
@@ -105,8 +147,16 @@ class ProceduralRenderer:
         palette = np.stack(
             [
                 self._hls(hue, max(0.12, lightness - 0.18), saturation),
-                self._hls((hue + 0.16 + 0.08 * action[2]) % 1.0, lightness + 0.08, min(0.98, saturation + 0.1)),
-                self._hls((hue + 0.54 + 0.06 * action[4]) % 1.0, min(0.82, lightness + 0.27), 0.48 + 0.25 * radial_mix),
+                self._hls(
+                    (hue + 0.16 + 0.08 * action[2]) % 1.0,
+                    lightness + 0.08,
+                    min(0.98, saturation + 0.1),
+                ),
+                self._hls(
+                    (hue + 0.54 + 0.06 * action[4]) % 1.0,
+                    min(0.82, lightness + 0.27),
+                    0.48 + 0.25 * radial_mix,
+                ),
                 self._hls((hue + 0.78) % 1.0, 0.16 + 0.16 * openness, 0.60),
             ],
             axis=0,
@@ -118,7 +168,10 @@ class ProceduralRenderer:
         rgb = np.empty((*t.shape, 3), dtype=np.float32)
         for index in range(3):
             mask = segment == index
-            rgb[mask] = palette[index] * (1.0 - local[mask, None]) + palette[index + 1] * local[mask, None]
+            rgb[mask] = (
+                palette[index] * (1.0 - local[mask, None])
+                + palette[index + 1] * local[mask, None]
+            )
 
         glow = np.clip((secondary + 1.0) * 0.5, 0.0, 1.0)[..., None]
         rgb = rgb * (0.78 + 0.30 * glow)
@@ -127,15 +180,35 @@ class ProceduralRenderer:
         rgb = rgb * (1.0 - contour[..., None]) + palette[2] * contour[..., None]
 
         grain = rng.normal(0.0, texture, size=rgb.shape).astype(np.float32)
-        grain *= (0.45 + 0.55 * np.abs(tertiary[..., None]))
+        grain *= 0.45 + 0.55 * np.abs(tertiary[..., None])
         vignette = np.clip(1.08 - 0.24 * (self.x**2 + self.y**2), 0.72, 1.0)[..., None]
         rgb = np.clip(rgb * vignette + grain, 0.0, 1.0)
 
-        image = Image.fromarray((rgb * 255.0).astype(np.uint8), mode="RGB")
+        image = Image.fromarray((rgb * 255.0).astype(np.uint8))
         if texture < 0.025:
             image = image.filter(ImageFilter.GaussianBlur(radius=0.35))
-        image.save(path, format="PNG", optimize=True)
-        return RenderedArtifact(path=path, feature_vector=self._features(rgb))
+        final_array = np.asarray(image, dtype=np.float32) / 255.0
+
+        temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+        try:
+            image.save(temporary, format="PNG", optimize=True)
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+        return RenderedArtifact(
+            path=path,
+            feature_vector=self._features(final_array),
+            digest=self._file_digest(path),
+        )
+
+    @staticmethod
+    def _file_digest(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
 
     @staticmethod
     def _hls(hue: float, lightness: float, saturation: float) -> np.ndarray:
