@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#090909" />
+    <title>Art Optimizer</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main id="app" class="app-shell" aria-live="polite">
+      <section id="start-screen" class="start-screen">
+        <div class="start-card">
+          <p class="eyebrow">Human-in-the-loop generative search</p>
+          <h1>Art Optimizer</h1>
+          <p class="start-copy">
+            Begin with one world. Preview four possible descendants, choose one, and let the local
+            preference model learn the direction you are moving.
+          </p>
+          <form id="start-form">
+            <label for="prompt">Initial conditions</label>
+            <textarea id="prompt" rows="3">an evolving impossible garden</textarea>
+            <button type="submit" class="primary-button">Create world</button>
+          </form>
+          <p class="renderer-note">
+            This runnable slice uses the deterministic procedural renderer. It exercises the real
+            streaming, branching, Bayesian-choice, reroll, history, and persistent-atlas paths.
+          </p>
+        </div>
+      </section>
+
+      <section id="studio" class="studio hidden">
+        <header class="top-bar">
+          <div>
+            <span class="brand">ART OPTIMIZER</span>
+            <span id="world-label" class="muted"></span>
+          </div>
+          <div class="top-meta">
+            <span id="learning-label"></span>
+            <span id="connection-label" class="connection">connecting</span>
+          </div>
+        </header>
+
+        <section class="canvas-stage" id="canvas-stage">
+          <img id="current-image" class="art-image current-image" alt="Current generated design" />
+          <img id="preview-image" class="art-image preview-image hidden" alt="Candidate preview" />
+          <div id="canvas-loader" class="canvas-loader hidden">Building world…</div>
+
+          <div id="candidate-corners" class="candidate-corners" aria-label="Candidate designs"></div>
+
+          <div class="canvas-caption">
+            <span id="preview-label">CURRENT DESIGN</span>
+            <span id="round-label"></span>
+          </div>
+        </section>
+
+        <nav class="command-bar" aria-label="Design controls">
+          <button id="favorite-current" class="command-button" type="button">☆ Favorite current</button>
+          <button id="reroll" class="command-button" type="button">↻ Reroll</button>
+          <button id="new-world" class="command-button" type="button">✦ New world</button>
+          <button id="history-toggle" class="command-button" type="button">History <span id="history-count">0</span></button>
+        </nav>
+
+        <aside id="history-drawer" class="history-drawer" aria-label="Recent committed designs">
+          <div class="history-header">
+            <span>LAST TEN COMMITTED DESIGNS</span>
+            <span id="atlas-label" class="muted"></span>
+          </div>
+          <div id="history-strip" class="history-strip"></div>
+        </aside>
+
+        <div id="toast" class="toast hidden" role="status"></div>
+      </section>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
