@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
@@ -14,8 +15,15 @@ from .domain import (
     CreateSessionRequest,
     ExposurePayload,
     FavoritePayload,
+    NewWorldPayload,
+    RestorePayload,
 )
-from .service import ArtOptimizerService, ConflictError, NotFoundError
+from .service import (
+    ArtOptimizerService,
+    ConflictError,
+    NotFoundError,
+    OperationError,
+)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -24,7 +32,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     service = ArtOptimizerService(settings)
     static_dir = Path(__file__).with_name("static")
 
-    app = FastAPI(title="Art Optimizer", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        try:
+            yield
+        finally:
+            await service.shutdown()
+
+    app = FastAPI(title="Art Optimizer", version="0.2.0", lifespan=lifespan)
     app.state.service = service
     app.mount("/assets", StaticFiles(directory=settings.artifacts_dir), name="assets")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
@@ -37,6 +52,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def handle_conflict(_: Request, error: ConflictError) -> JSONResponse:
         return JSONResponse({"detail": str(error)}, status_code=409)
 
+    @app.exception_handler(OperationError)
+    async def handle_operation_error(_: Request, error: OperationError) -> JSONResponse:
+        return JSONResponse({"detail": str(error)}, status_code=500)
+
     @app.get("/")
     async def index() -> FileResponse:
         return FileResponse(static_dir / "index.html")
@@ -44,9 +63,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/healthz")
     async def health() -> dict[str, object]:
         return {
-            "ok": True,
+            "ok": service.store.integrity_check() == "ok",
+            "database": service.store.integrity_check(),
             "renderer": service.renderer.revision,
             "control_basis": service.renderer.control_basis_revision,
+            "feature_revision": service.renderer.feature_revision,
             "data_dir": str(settings.data_dir),
         }
 
@@ -87,8 +108,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return await service.reroll(session_id, payload)
 
     @app.post("/api/sessions/{session_id}/new-world")
-    async def new_world(session_id: str) -> dict[str, object]:
-        return await service.new_world(session_id)
+    async def new_world(
+        session_id: str,
+        payload: NewWorldPayload,
+    ) -> dict[str, object]:
+        return await service.new_world(session_id, payload)
 
     @app.post("/api/sessions/{session_id}/designs/{design_id}/favorite")
     async def favorite(
@@ -99,8 +123,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return await service.favorite(session_id, design_id, payload)
 
     @app.post("/api/sessions/{session_id}/history/{branch_node_id}/restore")
-    async def restore(session_id: str, branch_node_id: str) -> dict[str, object]:
-        return await service.restore(session_id, branch_node_id)
+    async def restore(
+        session_id: str,
+        branch_node_id: str,
+        payload: RestorePayload,
+    ) -> dict[str, object]:
+        return await service.restore(session_id, branch_node_id, payload)
 
     return app
 
@@ -110,7 +138,7 @@ app = create_app()
 
 def run() -> None:
     parser = argparse.ArgumentParser(description="Run the Art Optimizer development server")
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", default=8000, type=int)
     parser.add_argument("--reload", action="store_true")
     args = parser.parse_args()
