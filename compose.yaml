@@ -1,0 +1,13 @@
+services:
+  art-optimizer:
+    build: .
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      ART_OPTIMIZER_DATA_DIR: /data
+      ART_OPTIMIZER_IMAGE_SIZE: "${ART_OPTIMIZER_IMAGE_SIZE:-640}"
+    volumes:
+      - art-optimizer-data:/data
+
+volumes:
+  art-optimizer-data:
