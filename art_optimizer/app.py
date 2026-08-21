@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -21,10 +21,12 @@ from .domain import (
     RestorePayload,
 )
 from .model_codec import model_catalog
-from .service import (
-    ConflictError,
-    NotFoundError,
-    OperationError,
+from .service import ConflictError, NotFoundError, OperationError
+from .ui_experiments import (
+    get_ui_experiment,
+    selected_ui_id,
+    ui_catalog,
+    validate_ui_files,
 )
 
 
@@ -36,8 +38,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     static_dir = Path(
         os.environ.get("ART_OPTIMIZER_STATIC_DIR", str(default_static_dir))
     ).expanduser().resolve()
-    if not (static_dir / "index.html").is_file():
-        raise ValueError(f"UI directory has no index.html: {static_dir}")
+    validate_ui_files(static_dir)
+    default_ui = get_ui_experiment(selected_ui_id())
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -46,7 +48,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await service.shutdown()
 
-    app = FastAPI(title="Art Optimizer", version="0.3.0", lifespan=lifespan)
+    app = FastAPI(title="Art Optimizer", version="0.4.0", lifespan=lifespan)
     app.state.service = service
     app.mount("/assets", StaticFiles(directory=settings.artifacts_dir), name="assets")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
@@ -65,7 +67,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/")
     async def index() -> FileResponse:
-        return FileResponse(static_dir / "index.html")
+        return FileResponse(static_dir / default_ui.filename)
+
+    @app.get("/ui/{experiment_id}")
+    async def experiment_ui(experiment_id: str) -> FileResponse:
+        try:
+            experiment = get_ui_experiment(experiment_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error).strip("'")) from error
+        return FileResponse(static_dir / experiment.filename)
 
     @app.get("/healthz")
     async def health() -> dict[str, object]:
@@ -85,12 +95,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "content_filter_required": capabilities.content_filter_required,
             "license_id": capabilities.license_id,
             "license_url": capabilities.license_url,
+            "ui": default_ui.experiment_id,
             "data_dir": str(settings.data_dir),
         }
 
     @app.get("/api/models")
     async def models() -> list[dict[str, object]]:
         return model_catalog()
+
+    @app.get("/api/ui-experiments")
+    async def ui_experiments() -> list[dict[str, str]]:
+        return ui_catalog()
 
     @app.post("/api/sessions")
     async def create_session(request: CreateSessionRequest) -> dict[str, object]:

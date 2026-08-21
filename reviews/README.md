@@ -4,7 +4,7 @@
 **Review date:** 2026-08-22  
 **Scope:** persistent generative preference, interactive subjective optimization, image-model control spaces, and the product semantics of Art Optimizer
 
-This directory separates five formal research reviews from product synthesis and design decisions. The goal is not to decorate the project with citations after the fact. The goal is to make clear:
+This directory separates formal research reviews from product synthesis and design decisions. The goal is not to decorate the project with citations after the fact. The goal is to make clear:
 
 1. what prior work actually established;
 2. which parts Art Optimizer directly adopts;
@@ -28,13 +28,15 @@ This directory separates five formal research reviews from product synthesis and
 5. [Interactive Generative Search Systems](05_INTERACTIVE_GENERATIVE_SEARCH_SYSTEMS.md)  
    Compares Design Adjectives, interactive evolutionary computation, active preference tools, Sequential Gallery, SwipeGANSpace, FABRIC, GimmBO, and MultiBO as interactive systems rather than isolated algorithms.
 
-## Companion reviews
+## Companion reviews and design explorations
 
 - [Murdock claim and citation map](01A_RYAN_MURDOCK_CLAIM_AND_CITATION_MAP.md)
 - [Shimizu claim and citation map](02A_EVAN_SHIMIZU_CLAIM_AND_CITATION_MAP.md)
 - [Research synthesis for Art Optimizer](06_ART_OPTIMIZER_RESEARCH_SYNTHESIS.md)
 - [Core mechanics and user-actions design review](07_CORE_MECHANICS_AND_USER_ACTIONS_DESIGN_REVIEW.md)
 - [Experiment and evaluation plan](08_EXPERIMENT_AND_EVALUATION_PLAN.md)
+- [From image anchors to composable concept lanes](09_ATTRIBUTE_LIBRARY_AND_ANCHORING_EXPLORATION.md)
+- [Concept-lanes executable UI experiment specification](10_CONCEPT_LANES_UI_EXPERIMENTS.md)
 - [Canonical citation ledger](CITATION_LEDGER.md)
 
 ## Source policy
@@ -73,6 +75,14 @@ uncertainty-aware candidate selection
 a compact, versioned generator control space
         +
 an interaction model that preserves agency and recoverability
+```
+
+The concept-lane exploration adds another distinction:
+
+```text
+current rendered realization
+        !=
+reusable composition of learned attributes
 ```
 
 No single reviewed system supplies that entire stack. Art Optimizer's contribution is therefore best described as a specific integration and experimental platform, not as proof that every component is already optimal.

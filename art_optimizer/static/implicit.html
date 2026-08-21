@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#070707" />
+    <title>Art Optimizer — Implicit Lanes</title>
+    <link rel="stylesheet" href="/static/experiment_styles.css" />
+  </head>
+  <body>
+    <section id="start-screen" class="experiment-start">
+      <div class="experiment-start-card">
+        <span class="experiment-kicker">UI experiment A · progressive disclosure</span>
+        <h1>Implicit lanes</h1>
+        <p>
+          Pick images exactly as before. Repeatedly useful changes become reusable non-prompt
+          directions automatically. The concept library stays quiet until you ask to inspect it.
+        </p>
+        <form id="start-form">
+          <textarea id="prompt" rows="3" aria-label="Initial conditions">an evolving impossible garden</textarea>
+          <button class="primary" type="submit">Create world</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="studio" class="experiment-shell implicit-shell hidden">
+      <header class="experiment-topbar">
+        <div>
+          <span class="experiment-brand">ART OPTIMIZER</span>
+          <span id="world-label" class="experiment-meta"></span>
+        </div>
+        <nav id="experiment-switcher" class="experiment-switcher" aria-label="UI experiment"></nav>
+        <div class="experiment-meta">
+          <span id="learning-label"></span>
+          <span id="connection-label" class="connection">offline</span>
+        </div>
+      </header>
+
+      <main class="image-stage implicit-stage">
+        <img id="current-image" class="main-image current-image" alt="Current committed design" />
+        <img id="preview-image" class="main-image preview-image hidden" alt="Candidate preview" />
+        <div id="candidate-container" class="implicit-candidates" aria-label="Candidate descendants"></div>
+        <button id="concept-status" class="implicit-status" type="button">
+          <span id="concept-count">0 learned lanes</span>
+          <span id="concept-dots" class="concept-dots"></span>
+        </button>
+        <div id="stage-caption" class="stage-caption">CURRENT DESIGN</div>
+      </main>
+
+      <footer class="command-row">
+        <button id="favorite-current" class="secondary" type="button">☆ Favorite current</button>
+        <button id="reroll" class="secondary" type="button">↻ Keep current / reroll</button>
+        <button id="recast" class="primary" type="button">Recast learned mix</button>
+        <button id="new-world" class="secondary" type="button">New taste-guided world</button>
+        <button id="history-toggle" class="secondary" type="button">History</button>
+      </footer>
+
+      <aside id="concept-drawer" class="drawer hidden" aria-label="Learned concepts">
+        <div class="drawer-header">
+          <div>
+            <span class="section-kicker">Optional control</span>
+            <h2>Learned directions</h2>
+          </div>
+          <button id="concept-close" class="icon-button secondary" type="button">Close</button>
+        </div>
+        <div id="concept-list" class="concept-list"></div>
+      </aside>
+
+      <aside id="history-drawer" class="drawer hidden" aria-label="History">
+        <div class="drawer-header">
+          <div>
+            <span class="section-kicker">Recoverable branch state</span>
+            <h2>Recent designs</h2>
+          </div>
+          <button id="history-close" class="icon-button secondary" type="button">Close</button>
+        </div>
+        <div id="history-strip" class="history-strip"></div>
+      </aside>
+
+      <div id="toast" class="toast hidden" role="status"></div>
+    </section>
+    <script type="module" src="/static/ui_implicit.js"></script>
+  </body>
+</html>

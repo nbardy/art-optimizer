@@ -37,7 +37,8 @@ jobs:
         run: |
           python -m ruff check .
           python -m compileall -q art_optimizer tests scripts
-          node --check art_optimizer/static/app.js
+          for file in art_optimizer/static/*.js; do node --check "$file"; done
+          node tests/js/test_concept_library.mjs
 
       - name: Unit and integration tests
         run: |
