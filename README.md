@@ -23,6 +23,19 @@ The repository contains a runnable CPU reference implementation and local open-w
 
 FLUX and Krea run locally through Diffusers. There is no hosted-model API adapter. The default real-model codec builds eight semantic directions directly in prompt-embedding space; a prompt-string fallback remains available for comparison.
 
+## Research and design reviews
+
+A source-backed multi-document review corpus lives in [`reviews/`](reviews/README.md). It contains:
+
+- five formal research reviews covering generative recommenders, Design Adjectives, preference learning and preferential Bayesian optimization, generator control spaces, and interactive generative search systems;
+- dedicated claim-and-citation maps for Ryan Murdock's and Evan Shimizu's work;
+- a synthesis that states exactly what Art Optimizer adopts, modifies, and still needs to test;
+- a detailed design review of preview, commit, reroll, favorite, New world, history, exposure, streaming, candidate roles, and missing actions;
+- an experiment plan with interaction, codec, learner, planner, persistent-memory, and longitudinal studies;
+- a canonical citation ledger that distinguishes peer-reviewed papers, theses, preprints, essays, project pages, and source repositories.
+
+Start with [the review index](reviews/README.md), then read [the research synthesis](reviews/06_ART_OPTIMIZER_RESEARCH_SYNTHESIS.md) and [the core mechanics review](reviews/07_CORE_MECHANICS_AND_USER_ACTIONS_DESIGN_REVIEW.md).
+
 ## Quick start: CPU reference renderer
 
 Python 3.11 or newer is required.
