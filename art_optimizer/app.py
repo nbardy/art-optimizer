@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -31,7 +32,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.ensure_directories()
     service = ConfiguredArtOptimizerService(settings)
-    static_dir = Path(__file__).with_name("static")
+    default_static_dir = Path(__file__).with_name("static")
+    static_dir = Path(
+        os.environ.get("ART_OPTIMIZER_STATIC_DIR", str(default_static_dir))
+    ).expanduser().resolve()
+    if not (static_dir / "index.html").is_file():
+        raise ValueError(f"UI directory has no index.html: {static_dir}")
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):

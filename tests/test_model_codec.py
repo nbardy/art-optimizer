@@ -24,6 +24,12 @@ class FakeTensor:
     def clone(self):
         return FakeTensor(self.data.copy(), self.dtype)
 
+    def __getitem__(self, item):
+        return FakeTensor(self.data[item], self.dtype)
+
+    def any(self, *, dim, keepdim):
+        return FakeTensor(self.data.any(axis=dim, keepdims=keepdim), "bool")
+
     def float(self):
         return FakeTensor(self.data.astype(np.float64), "float32")
 
@@ -84,22 +90,29 @@ class FakeTorch:
 
 
 class FakeFluxPipeline:
+    def __init__(self):
+        self.encode_calls = 0
+
     def encode_prompt(self, *, prompt):
-        value = float(sum(prompt.encode("utf-8")) % 29)
-        embedding = FakeTensor(np.full((1, 6, 4), value))
-        return embedding, FakeTensor(np.zeros((1, 6, 4)))
+        self.encode_calls += 1
+        values = [float(sum(item.encode("utf-8")) % 29) for item in prompt]
+        embedding = FakeTensor(np.stack([np.full((6, 4), value) for value in values]))
+        return embedding, FakeTensor(np.zeros((len(prompt), 6, 4)))
 
 
 class FakeKreaPipeline:
     def __init__(self):
         self.calls: list[dict] = []
+        self.encode_calls = 0
 
     def encode_prompt(self, *, prompt):
-        value = float(sum(prompt.encode("utf-8")) % 31)
-        embedding = FakeTensor(np.full((1, 6, 2, 3), value))
-        valid = min(6, max(1, len(prompt.split()) % 7))
-        mask = np.zeros((1, 6), dtype=bool)
-        mask[:, :valid] = True
+        self.encode_calls += 1
+        values = [float(sum(item.encode("utf-8")) % 31) for item in prompt]
+        embedding = FakeTensor(np.stack([np.full((6, 2, 3), value) for value in values]))
+        mask = np.zeros((len(prompt), 6), dtype=bool)
+        for index, item in enumerate(prompt):
+            valid = min(6, max(1, len(item.split()) % 7))
+            mask[index, :valid] = True
         return embedding, FakeTensor(mask, "bool")
 
     def __call__(self, **kwargs):
@@ -144,11 +157,13 @@ def test_flux_embedding_direction_bank_uses_prompt_embeddings() -> None:
         seed=1,
         size=512,
     )
-    bank = build_direction_bank(FakeFluxPipeline(), request)
+    pipeline = FakeFluxPipeline()
+    bank = build_direction_bank(pipeline, request)
     kwargs = apply_direction_bank(request, bank, np.zeros(8))
     assert kwargs["prompt"] is None
     np.testing.assert_allclose(kwargs["prompt_embeds"].data, bank.base.embeddings.data)
     assert len(bank.directions) == 8
+    assert pipeline.encode_calls == 1
 
 
 def test_krea_renderer_uses_embedding_codec_and_validated_cache(tmp_path) -> None:
@@ -160,10 +175,9 @@ def test_krea_renderer_uses_embedding_codec_and_validated_cache(tmp_path) -> Non
         device="cpu",
         dtype="float32",
         conditioning_mode="embedding",
+        pipeline=(pipeline := FakeKreaPipeline()),
+        torch_module=FakeTorch(),
     )
-    pipeline = FakeKreaPipeline()
-    renderer._pipeline = pipeline
-    renderer._torch = FakeTorch()
 
     first = renderer.render(
         design_id="same",
@@ -188,6 +202,7 @@ def test_krea_renderer_uses_embedding_codec_and_validated_cache(tmp_path) -> Non
     assert first.request_digest == cached.request_digest
     assert changed.request_digest != first.request_digest
     assert len(pipeline.calls) == 2
+    assert pipeline.encode_calls == 1
     assert pipeline.calls[0]["prompt"] is None
     assert pipeline.calls[0]["prompt_embeds_mask"].dtype == "bool"
     assert (tmp_path / "same.png.json").exists()

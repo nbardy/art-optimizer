@@ -49,6 +49,8 @@ class LocalDiffusersRenderer:
         cpu_offload: bool | None = None,
         local_files_only: bool | None = None,
         conditioning_mode: str | None = None,
+        pipeline: Any | None = None,
+        torch_module: Any | None = None,
     ) -> None:
         codec.profile.validate_size(size)
         if codec.profile.pipeline_class is None:
@@ -94,8 +96,12 @@ class LocalDiffusersRenderer:
         self.revision = f"local-diffusers/{self.profile.model_id}/v2"
         self.codec_revision = codec.profile.codec_revision
         self.control_basis_revision = codec.profile.control_basis_revision
-        self._pipeline: Any | None = None
-        self._torch: Any | None = None
+        if (pipeline is None) != (torch_module is None):
+            raise ValueError("pipeline and torch_module must be supplied together")
+        if pipeline is None:
+            _require_dependencies()
+        self._pipeline = pipeline
+        self._torch = torch_module
         self._lock = threading.Lock()
         self._bank_cache: OrderedDict[str, EmbeddingDirectionBank] = OrderedDict()
         self._bank_cache_size = 2
@@ -175,11 +181,10 @@ class LocalDiffusersRenderer:
             generator_device = "cpu" if self.cpu_offload or self.device == "mps" else self.device
             generator = torch.Generator(device=generator_device).manual_seed(request.seed)
             with torch.inference_mode():
-                conditioning = (
-                    self._embedding_kwargs(pipeline, request, values)
-                    if self.conditioning_mode == "embedding"
-                    else {"prompt": request.prompt}
-                )
+                if self.conditioning_mode == "embedding":
+                    conditioning = self._embedding_kwargs(pipeline, request, values)
+                else:
+                    conditioning = {"prompt": request.prompt}
                 output = pipeline(
                     **conditioning,
                     height=request.height,
@@ -222,13 +227,7 @@ class LocalDiffusersRenderer:
     def _load_pipeline(self) -> tuple[Any, Any]:
         if self._pipeline is not None and self._torch is not None:
             return self._pipeline, self._torch
-        missing = [name for name in ("torch", "diffusers") if importlib.util.find_spec(name) is None]
-        if missing:
-            packages = ", ".join(missing)
-            raise RuntimeError(
-                f"local model dependencies are missing ({packages}); "
-                "install art-optimizer[models]"
-            )
+        _require_dependencies()
         torch = importlib.import_module("torch")
         diffusers = importlib.import_module("diffusers")
         pipeline_class = getattr(diffusers, self.profile.pipeline_class, None)
@@ -268,3 +267,15 @@ def _package_version(name: str) -> str:
         return importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError:
         return "not-installed"
+
+
+def _require_dependencies() -> None:
+    missing = [
+        name for name in ("torch", "diffusers") if importlib.util.find_spec(name) is None
+    ]
+    if missing:
+        packages = ", ".join(missing)
+        raise RuntimeError(
+            f"local model dependencies are missing ({packages}); "
+            "install art-optimizer[models]"
+        )

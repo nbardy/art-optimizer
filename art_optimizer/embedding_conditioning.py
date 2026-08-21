@@ -22,19 +22,19 @@ class EmbeddingDirectionBank:
 
 
 class ConditioningAdapter(Protocol):
-    def encode(self, pipeline: Any, prompt: str) -> EncodedPrompt: ...
+    def encode(self, pipeline: Any, prompts: list[str]) -> EncodedPrompt: ...
 
-    def merge_masks(self, prompts: tuple[EncodedPrompt, ...]) -> Any | None: ...
+    def output_mask(self, mask: Any | None) -> Any | None: ...
 
     def pipeline_kwargs(self, encoded: EncodedPrompt) -> dict[str, Any]: ...
 
 
 class Flux2ConditioningAdapter:
-    def encode(self, pipeline: Any, prompt: str) -> EncodedPrompt:
-        embeddings, _text_ids = pipeline.encode_prompt(prompt=prompt)
+    def encode(self, pipeline: Any, prompts: list[str]) -> EncodedPrompt:
+        embeddings, _text_ids = pipeline.encode_prompt(prompt=prompts)
         return EncodedPrompt(embeddings=embeddings)
 
-    def merge_masks(self, prompts: tuple[EncodedPrompt, ...]) -> None:
+    def output_mask(self, mask: Any | None) -> None:
         return None
 
     def pipeline_kwargs(self, encoded: EncodedPrompt) -> dict[str, Any]:
@@ -42,18 +42,12 @@ class Flux2ConditioningAdapter:
 
 
 class Krea2ConditioningAdapter:
-    def encode(self, pipeline: Any, prompt: str) -> EncodedPrompt:
-        embeddings, mask = pipeline.encode_prompt(prompt=prompt)
+    def encode(self, pipeline: Any, prompts: list[str]) -> EncodedPrompt:
+        embeddings, mask = pipeline.encode_prompt(prompt=prompts)
         return EncodedPrompt(embeddings=embeddings, mask=mask)
 
-    def merge_masks(self, prompts: tuple[EncodedPrompt, ...]) -> Any | None:
-        masks = [prompt.mask for prompt in prompts if prompt.mask is not None]
-        if not masks:
-            return None
-        merged = masks[0].clone()
-        for mask in masks[1:]:
-            merged = merged | mask
-        return merged
+    def output_mask(self, mask: Any | None) -> Any | None:
+        return None if mask is None else mask.any(dim=0, keepdim=True)
 
     def pipeline_kwargs(self, encoded: EncodedPrompt) -> dict[str, Any]:
         return {
@@ -87,18 +81,22 @@ def build_direction_bank(
     if request.pipeline_class is None:
         raise ValueError("embedding conditioning requires a model pipeline")
     adapter = get_conditioning_adapter(request.pipeline_class)
-    base = adapter.encode(pipeline, request.base_prompt)
-    directions: list[Any] = []
-    encoded_prompts: list[EncodedPrompt] = [base]
+    prompts = [request.base_prompt]
     for negative_prompt, positive_prompt in request.axis_prompts:
-        negative = adapter.encode(pipeline, negative_prompt)
-        positive = adapter.encode(pipeline, positive_prompt)
-        encoded_prompts.extend((negative, positive))
-        direction = (positive.embeddings - negative.embeddings) * 0.5
-        directions.append(_match_rms(direction, base.embeddings))
-    mask = adapter.merge_masks(tuple(encoded_prompts))
+        prompts.extend((negative_prompt, positive_prompt))
+    encoded = adapter.encode(pipeline, prompts)
+
+    base_embeddings = encoded.embeddings[0:1]
+    directions = []
+    for index in range(len(request.axis_prompts)):
+        negative = encoded.embeddings[1 + 2 * index : 2 + 2 * index]
+        positive = encoded.embeddings[2 + 2 * index : 3 + 2 * index]
+        directions.append(_match_rms((positive - negative) * 0.5, base_embeddings))
     return EmbeddingDirectionBank(
-        base=EncodedPrompt(embeddings=base.embeddings, mask=mask),
+        base=EncodedPrompt(
+            embeddings=base_embeddings,
+            mask=adapter.output_mask(encoded.mask),
+        ),
         directions=tuple(directions),
     )
 

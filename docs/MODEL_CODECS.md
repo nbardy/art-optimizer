@@ -80,7 +80,7 @@ A new acquisition policy consumes the same anchor, posterior, trust state, compa
 
 ## UI experiments
 
-The current browser is one client of the HTTP/SSE contract. A grid, scrolling feed, pairwise chooser, native mobile app, or research dashboard can use the same API without importing model or optimizer code.
+The current browser is one client of the HTTP/SSE contract. `ART_OPTIMIZER_STATIC_DIR` can point the server at another compiled client without touching model or optimizer code. A grid, scrolling feed, pairwise chooser, native mobile app, or research dashboard can use the same API without importing model or optimizer code.
 
 UI experiments must preserve event semantics: preview is not commitment, reroll selects the anchor, exposure is explicit, favorite is durable taste evidence, and New world is not a negative label.
 

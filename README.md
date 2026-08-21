@@ -84,6 +84,12 @@ To require pre-downloaded files and prevent network model downloads:
 export ART_OPTIMIZER_LOCAL_FILES_ONLY=1
 ```
 
+To pin a specific Hugging Face model revision for reproducible research:
+
+```bash
+export ART_OPTIMIZER_MODEL_REVISION=<commit-or-tag>
+```
+
 To compare against ordinary prompt compilation instead of embedding directions:
 
 ```bash
@@ -168,7 +174,7 @@ canonical action
 - **Preference learner:** isolated in `preference.py`.
 - **Acquisition policy:** isolated in `planner.py`.
 - **Persistent memory:** isolated in `atlas.py`.
-- **UI:** consumes versioned HTTP/SSE projections and can be replaced without importing optimizer or model code.
+- **UI:** consumes versioned HTTP/SSE projections and can be replaced without importing optimizer or model code. Set `ART_OPTIMIZER_STATIC_DIR` to serve another client build.
 
 The current server selects one render stack at process startup so only one large checkpoint occupies GPU memory. Algorithm and UI A/B harnesses can share the same persisted event facts; runtime hot-swapping of multiple giant checkpoints in one process is intentionally not part of v0.
 

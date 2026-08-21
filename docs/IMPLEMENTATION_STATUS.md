@@ -1,11 +1,11 @@
 # Implementation Status
 
-**Status:** Runnable v0 reference implementation  
-**Last updated:** 2026-08-20
+**Status:** runnable v0.3 research implementation  
+**Last updated:** 2026-08-21
 
-## Implemented
+## Complete interaction and learning loop
 
-The repository now executes the complete interaction and learning loop on a CPU:
+The repository executes the complete browser-to-renderer loop:
 
 ```text
 create world
@@ -20,111 +20,74 @@ create world
 → restore and fork from recent branch checkpoints
 ```
 
-The implementation lives in `art_optimizer/` and uses FastAPI, SQLite, NumPy, SciPy, Pillow, and framework-free browser JavaScript.
+The CPU procedural renderer remains the deterministic reference used by ordinary tests and UI development.
 
-## Honest renderer boundary
+## Local real-model stacks
 
-`ProceduralRenderer` is the supported development renderer. It has:
+Two local/open-weight targets are implemented behind the same model profile, semantic codec, renderer, persistence, and UI contracts:
 
-- one fixed stochastic seed per world;
-- a declared global eight-dimensional absolute control basis;
-- deterministic replay from prompt, seed, and action;
-- enough smooth variation to test preference learning and candidate planning;
-- CPU rendering with no model download or API key.
+- `flux2-klein` — `black-forest-labs/FLUX.2-klein-4B` through `Flux2KleinPipeline`;
+- `krea2-turbo` — `krea/Krea-2-Turbo` through `Krea2Pipeline`.
 
-It is not evidence that a diffusion checkpoint exposes equally useful coordinates. A real-model adapter remains blocked on `CONTROL_BASIS_EXPERIMENT.md`.
+No hosted generation API is used. Model dependencies are optional and weights load lazily. The selected model is fixed for one server process so only one large checkpoint occupies GPU memory.
 
-## Local preference learner
+## Embedding-level controls
 
-The implementation follows `V0_ALGORITHM_SPEC.md`:
+The default real-model codec operates directly on the model text-embedding surface. For each fixed world prompt it encodes one batched set containing the base prompt and positive/negative endpoints for eight semantic axes, builds RMS-normalized directions, and mixes them by the optimizer's canonical action vector.
 
-- quadratic features over absolute action coordinates;
-- Bayesian linear utility;
-- one multinomial observation over anchor plus exposed candidates;
-- reroll as anchor selection with weight `0.35`;
-- damped Newton/Laplace posterior updates;
-- slight covariance inflation to follow changing branch intent;
-- posterior mean and variance used by acquisition.
+FLUX and Krea differ only in small conditioning adapters:
 
-## Candidate planner
+- FLUX consumes `prompt_embeds`;
+- Krea consumes `prompt_embeds` plus `prompt_embeds_mask`.
 
-The finite hidden pool combines:
+`ART_OPTIMIZER_CONDITIONING_MODE=prompt` preserves an ordinary prompt-compilation baseline for controlled comparisons.
 
-- local Gaussian trust-region proposals;
-- scrambled Sobol global coverage;
-- declared atlas-guided proposals.
+## Renderer and replay hardening
 
-The displayed quartet has fixed policy roles:
+- explicit pipeline classes rather than generic pipeline guessing;
+- one data-driven model registry with license and deployment metadata;
+- fail-fast local-model dependency checks;
+- optional model revision pinning;
+- atomic image and manifest writes;
+- cached images reused only when the complete render-request digest matches;
+- model-specific runtime directories prevent cross-model session or artifact repair;
+- active model, codec, conditioning mode, basis, replay level, and license reported by `/healthz`;
+- full catalog reported by `/api/models`.
 
-1. best local continuation;
-2. diverse posterior sample;
-3. informative probe;
-4. controlled surprise or alternate persistent mode.
+## Modular experiment boundaries
 
-## Persistent preference atlas
+- renderer/model selection is composed in `composition.py`;
+- model semantics and licenses live in `model_codec.py`;
+- tensor-signature differences live in `embedding_conditioning.py`;
+- acquisition lives in `planner.py`;
+- local preference learning lives in `preference.py`;
+- persistent memory lives in `atlas.py`;
+- alternate browser builds can be selected with `ART_OPTIMIZER_STATIC_DIR` and use the same HTTP/SSE API.
 
-The atlas projection is persisted separately from session-local state.
+The preference learner is isolated but still selected concretely by the current service. A future learner registry is a small composition-root extension, not a cross-cutting model or UI rewrite.
 
-- commits: weight `0.05`;
-- revisits: weight `0.25`;
-- favorites: weight `1.00`;
-- exports: reserved weight `1.50`;
-- strong novel events may spawn components;
-- one weak novel event remains provisional;
-- three coherent weak events from distinct designs may promote a component;
-- unfavorite retracts the corresponding strong evidence and rebuilds the projection;
-- outside-prior probability remains `0.20`.
+## Validation completed without model weights
 
-The procedural renderer's action basis is globally stable, so component action centroids may bias new worlds. A diffusion adapter must use a declared validated transport, such as fixed exemplar/reference coordinates, instead of assuming action transfer.
+The normal test path remains GPU-free. It covers the procedural renderer, service state machine, optimizer, atlas, persistence, API, UI syntax, and fake-pipeline tests for both FLUX and Krea codecs. The fake-pipeline tests verify batched endpoint encoding, Krea masks, embedding application, model metadata, and cache invalidation.
 
-## Streaming and persistence
+## Empirical gates still open
 
-- Each candidate renders in an independent asynchronous task.
-- SSE publishes a fresh public session projection as slots progress.
-- Images are durable before a candidate becomes selectable.
-- Round IDs prevent stale results from mutating a newer round.
-- Events and the matching session projection are written in one SQLite transaction.
-- Ready sessions survive process restarts.
-- Interrupted candidate rounds resume their unfinished slots when loaded.
+The code path is ready to run on a GPU node, but the real checkpoints were not downloaded or benchmarked in the implementation environment. Before either becomes the default, run:
 
-## Interaction details implemented
+- a real root and four-candidate smoke session;
+- coordinate sweeps for all eight dimensions;
+- cross-seed and cross-prompt smoothness tests;
+- within-slate diversity and preservation measurements;
+- VRAM and batch-of-four latency receipts;
+- human comparison against prompt-only and random baselines;
+- Krea deployment-license and content-filter review.
 
-- desktop hover preview;
-- touch press-and-hold preview and tap commit;
-- candidate-specific favorite without navigation;
-- committed-image favorite that never retargets during preview;
-- client-side 300 ms / 50% exposure qualification;
-- reroll versus non-preference-bearing round skip;
-- keyboard shortcuts `1`–`4`, `R`, `F`, `N`, and `H`;
-- last-ten branch history and exact checkpoint restore;
-- responsive layout and reduced-motion support.
+## Deferred product infrastructure
 
-## Validation completed
-
-The test suite covers:
-
-- deterministic renderer replay;
-- four distinct candidate roles and bounded actions;
-- selection learning and reroll behavior;
-- posterior snapshot restoration;
-- strong component spawning and weak-evidence promotion;
-- favorite retraction;
-- session creation, SSE initial delivery, candidate streaming, commit, favorite, reroll, New world, history restore, event logging, and restart persistence;
-- API health and static application serving;
-- JavaScript syntax validation.
-
-A live server smoke test has also exercised HTTP creation, independently completed images, SSE delivery, posterior-dependent next-round scores, and static asset retrieval.
-
-## Deliberately deferred
-
-- real diffusion/flow model adapter;
-- reference-image upload UI;
-- authentication and multi-user isolation;
-- export endpoint and downloadable provenance bundle;
-- collaborative filtering across users;
-- learned attention/adapter directions;
-- offline LoRA or DPO consolidation;
-- full event-log reducer migrations;
-- production job broker/object store deployment.
-
-These are extensions of the current contracts, not requirements for the executable local vertical slice.
+- authentication, TLS, and multi-user isolation;
+- reference-image upload and atlas exemplar conditioning;
+- export/provenance bundles;
+- production GPU scheduling and object storage;
+- collaborative preference learning;
+- learned attention or adapter directions;
+- offline LoRA/DPO consolidation.
