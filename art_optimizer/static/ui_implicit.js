@@ -12,37 +12,36 @@ import {
 
 const studio = createStudioController();
 const tracker = createExposureTracker(studio);
-const elements = Object.fromEntries(
-  [
-    "start-screen",
-    "start-form",
-    "prompt",
-    "studio",
-    "experiment-switcher",
-    "world-label",
-    "learning-label",
-    "connection-label",
-    "current-image",
-    "preview-image",
-    "candidate-container",
-    "stage-caption",
-    "concept-status",
-    "concept-count",
-    "concept-dots",
-    "concept-drawer",
-    "concept-close",
-    "concept-list",
-    "favorite-current",
-    "reroll",
-    "recast",
-    "new-world",
-    "history-toggle",
-    "history-drawer",
-    "history-close",
-    "history-strip",
-    "toast",
-  ].map((id) => [id, document.getElementById(id)]),
-);
+const byId = (id) => document.getElementById(id);
+const elements = {
+  startScreen: byId("start-screen"),
+  startForm: byId("start-form"),
+  prompt: byId("prompt"),
+  studio: byId("studio"),
+  switcher: byId("experiment-switcher"),
+  world: byId("world-label"),
+  learning: byId("learning-label"),
+  connection: byId("connection-label"),
+  currentImage: byId("current-image"),
+  previewImage: byId("preview-image"),
+  candidateContainer: byId("candidate-container"),
+  stageCaption: byId("stage-caption"),
+  conceptStatus: byId("concept-status"),
+  conceptCount: byId("concept-count"),
+  conceptDots: byId("concept-dots"),
+  conceptDrawer: byId("concept-drawer"),
+  conceptClose: byId("concept-close"),
+  conceptList: byId("concept-list"),
+  favoriteCurrent: byId("favorite-current"),
+  reroll: byId("reroll"),
+  recast: byId("recast"),
+  newWorld: byId("new-world"),
+  historyToggle: byId("history-toggle"),
+  historyDrawer: byId("history-drawer"),
+  historyClose: byId("history-close"),
+  historyStrip: byId("history-strip"),
+  toast: byId("toast"),
+};
 
 function errorToast(error) {
   showToast(elements.toast, error.message || String(error));
@@ -83,15 +82,15 @@ function renderCandidates(state) {
 
 studio.subscribe((state) => {
   const snapshot = state.snapshot;
-  elements.connectionLabel.textContent = state.connection;
-  elements.connectionLabel.className = `connection ${state.connection}`;
+  elements.connection.textContent = state.connection;
+  elements.connection.className = `connection ${state.connection}`;
   if (!snapshot) return;
 
   elements.startScreen.classList.add("hidden");
   elements.studio.classList.remove("hidden");
   setImageSource(elements.currentImage, snapshot.current_design.image_url);
-  elements.worldLabel.textContent = ` · world ${snapshot.world.world_id.slice(-6)}`;
-  elements.learningLabel.textContent = `${snapshot.learner.observation_count} choices`;
+  elements.world.textContent = ` · world ${snapshot.world.world_id.slice(-6)}`;
+  elements.learning.textContent = `${snapshot.learner.observation_count} choices`;
 
   const currentFavorite = snapshot.favorites.includes(snapshot.current_design.design_id);
   elements.favoriteCurrent.textContent = currentFavorite ? "★ Favorited" : "☆ Favorite current";
@@ -130,7 +129,7 @@ wireStartForm({
   shell: elements.studio,
   onError: errorToast,
 });
-mountExperimentSwitcher(elements.experimentSwitcher, "implicit-lanes").catch(errorToast);
+mountExperimentSwitcher(elements.switcher, "implicit-lanes").catch(errorToast);
 
 studio.resume().then((snapshot) => {
   if (snapshot) {
@@ -142,7 +141,12 @@ studio.resume().then((snapshot) => {
 elements.favoriteCurrent.addEventListener("click", async () => {
   try {
     const result = await studio.favorite(studio.current().snapshot?.current_design.design_id);
-    if (result) showToast(elements.toast, result.favorite ? "Added to persistent taste" : "Removed from favorites");
+    if (result) {
+      showToast(
+        elements.toast,
+        result.favorite ? "Added to persistent taste" : "Removed from favorites",
+      );
+    }
   } catch (error) {
     errorToast(error);
   }
@@ -154,7 +158,9 @@ elements.reroll.addEventListener("click", async () => {
     if (result) {
       showToast(
         elements.toast,
-        result.exposureCount >= 2 ? "Kept the image; weak no to exposed moves" : "Skipped an underexposed round",
+        result.exposureCount >= 2
+          ? "Kept the image; weak no to exposed moves"
+          : "Skipped an underexposed round",
       );
     }
   } catch (error) {
@@ -179,10 +185,18 @@ elements.newWorld.addEventListener("click", async () => {
     errorToast(error);
   }
 });
-elements.conceptStatus.addEventListener("click", () => elements.conceptDrawer.classList.remove("hidden"));
-elements.conceptClose.addEventListener("click", () => elements.conceptDrawer.classList.add("hidden"));
-elements.historyToggle.addEventListener("click", () => elements.historyDrawer.classList.remove("hidden"));
-elements.historyClose.addEventListener("click", () => elements.historyDrawer.classList.add("hidden"));
+elements.conceptStatus.addEventListener("click", () => {
+  elements.conceptDrawer.classList.remove("hidden");
+});
+elements.conceptClose.addEventListener("click", () => {
+  elements.conceptDrawer.classList.add("hidden");
+});
+elements.historyToggle.addEventListener("click", () => {
+  elements.historyDrawer.classList.remove("hidden");
+});
+elements.historyClose.addEventListener("click", () => {
+  elements.historyDrawer.classList.add("hidden");
+});
 window.addEventListener("beforeunload", () => {
   tracker.clear();
   studio.close();

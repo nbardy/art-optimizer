@@ -34,12 +34,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.ensure_directories()
     service = ConfiguredArtOptimizerService(settings)
-    default_static_dir = Path(__file__).with_name("static")
+    default_static_dir = Path(__file__).with_name("static").resolve()
     static_dir = Path(
         os.environ.get("ART_OPTIMIZER_STATIC_DIR", str(default_static_dir))
     ).expanduser().resolve()
-    validate_ui_files(static_dir)
-    default_ui = get_ui_experiment(selected_ui_id())
+    bundled_ui = static_dir == default_static_dir
+    if bundled_ui:
+        validate_ui_files(static_dir)
+        default_ui = get_ui_experiment(selected_ui_id())
+        root_filename = default_ui.filename
+        active_ui_id = default_ui.experiment_id
+    else:
+        root_filename = "index.html"
+        if not (static_dir / root_filename).is_file():
+            raise ValueError(f"custom UI directory has no index.html: {static_dir}")
+        active_ui_id = "custom"
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -67,10 +76,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/")
     async def index() -> FileResponse:
-        return FileResponse(static_dir / default_ui.filename)
+        return FileResponse(static_dir / root_filename)
 
     @app.get("/ui/{experiment_id}")
     async def experiment_ui(experiment_id: str) -> FileResponse:
+        if not bundled_ui:
+            raise HTTPException(
+                status_code=404,
+                detail="bundled UI experiments are unavailable under ART_OPTIMIZER_STATIC_DIR",
+            )
         try:
             experiment = get_ui_experiment(experiment_id)
         except KeyError as error:
@@ -95,7 +109,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "content_filter_required": capabilities.content_filter_required,
             "license_id": capabilities.license_id,
             "license_url": capabilities.license_url,
-            "ui": default_ui.experiment_id,
+            "ui": active_ui_id,
             "data_dir": str(settings.data_dir),
         }
 

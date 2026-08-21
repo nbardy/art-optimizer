@@ -55,6 +55,18 @@ def test_health_models_ui_catalog_and_validation(tmp_path: Path) -> None:
         assert invalid.status_code == 422
 
 
+def test_custom_static_ui_requires_only_an_index(monkeypatch, tmp_path: Path) -> None:
+    custom = tmp_path / "custom-ui"
+    custom.mkdir()
+    (custom / "index.html").write_text("<h1>Custom Art UI</h1>", encoding="utf-8")
+    monkeypatch.setenv("ART_OPTIMIZER_STATIC_DIR", str(custom))
+
+    with TestClient(create_app(make_settings(tmp_path / "runtime"))) as client:
+        assert "Custom Art UI" in client.get("/").text
+        assert client.get("/healthz").json()["ui"] == "custom"
+        assert client.get("/ui/implicit-lanes").status_code == 404
+
+
 def test_composition_reset_uses_explicit_concept_action(tmp_path: Path) -> None:
     target = [-0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7]
     with TestClient(create_app(make_settings(tmp_path))) as client:
