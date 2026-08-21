@@ -4,46 +4,31 @@ import colorsys
 import hashlib
 import math
 import os
-import re
-from dataclasses import dataclass
+from collections.abc import Callable
 from pathlib import Path
-from uuid import uuid4
 
 import numpy as np
 from PIL import Image, ImageFilter
 
-
-_SAFE_DESIGN_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
-
-
-@dataclass(frozen=True)
-class RendererCapabilities:
-    action_dimension: int
-    deterministic: bool
-    supports_batching: bool
-    renderer_revision: str
-    control_basis_revision: str
-    feature_revision: str
+from .model_codec import get_codec
+from .rendering import (
+    ImageRenderer,
+    RenderedArtifact,
+    RendererCapabilities,
+    atomic_save_png,
+    file_digest,
+    image_features,
+    validate_render_input,
+)
 
 
-@dataclass(slots=True)
-class RenderedArtifact:
-    path: Path
-    feature_vector: list[float]
-    digest: str
+class ProceduralImageRenderer:
+    """Deterministic CPU renderer for interaction and optimizer tests."""
 
-
-class ProceduralRenderer:
-    """Deterministic, smooth eight-dimensional development renderer.
-
-    This is an honest CPU research renderer, not a diffusion-model impersonation.
-    It lets the interaction, replay, optimizer, persistence, and atlas run end to
-    end while a real image-model control basis is evaluated separately.
-    """
-
-    revision = "procedural-field/v2"
+    revision = "procedural-field/v3"
+    codec_revision = "procedural-native/v1"
     control_basis_revision = "procedural-global-8d/v1"
-    feature_revision = "procedural-features-13d/v1"
+    feature_revision = "rgb-summary-13d/v1"
     action_dimension = 8
 
     def __init__(self, artifacts_dir: Path, size: int = 640) -> None:
@@ -57,12 +42,15 @@ class ProceduralRenderer:
 
     def capabilities(self) -> RendererCapabilities:
         return RendererCapabilities(
+            model_id="procedural",
             action_dimension=self.action_dimension,
             deterministic=True,
             supports_batching=False,
             renderer_revision=self.revision,
+            codec_revision=self.codec_revision,
             control_basis_revision=self.control_basis_revision,
             feature_revision=self.feature_revision,
+            replay_level="exact",
         )
 
     def render(
@@ -73,26 +61,18 @@ class ProceduralRenderer:
         prompt: str,
         action: np.ndarray,
     ) -> RenderedArtifact:
-        if not _SAFE_DESIGN_ID.fullmatch(design_id):
-            raise ValueError("design_id contains unsafe path characters")
-        if not 0 <= seed <= (1 << 63) - 1:
-            raise ValueError("seed is outside the supported range")
-        action = np.asarray(action, dtype=np.float64)
-        if action.shape != (self.action_dimension,):
-            raise ValueError("procedural renderer expects exactly eight controls")
-        if not np.isfinite(action).all():
-            raise ValueError("renderer action must be finite")
-        action = np.clip(action, -1.0, 1.0)
-
+        action = validate_render_input(
+            design_id=design_id,
+            seed=seed,
+            action=action,
+            action_dimension=self.action_dimension,
+        )
         path = self.artifacts_dir / f"{design_id}.png"
         if path.exists():
             with Image.open(path) as stored:
-                array = np.asarray(stored.convert("RGB"), dtype=np.float32) / 255.0
-            return RenderedArtifact(
-                path=path,
-                feature_vector=self._features(array),
-                digest=self._file_digest(path),
-            )
+                image = stored.convert("RGB")
+                features = image_features(image)
+            return RenderedArtifact(path=path, feature_vector=features, digest=file_digest(path))
 
         prompt_hash = int.from_bytes(hashlib.sha256(prompt.encode("utf-8")).digest()[:8], "little")
         rng = np.random.default_rng((seed ^ prompt_hash) & ((1 << 63) - 1))
@@ -187,62 +167,99 @@ class ProceduralRenderer:
         image = Image.fromarray((rgb * 255.0).astype(np.uint8))
         if texture < 0.025:
             image = image.filter(ImageFilter.GaussianBlur(radius=0.35))
-        final_array = np.asarray(image, dtype=np.float32) / 255.0
-
-        temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-        try:
-            image.save(temporary, format="PNG", optimize=True)
-            os.replace(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)
-
+        atomic_save_png(image, path)
         return RenderedArtifact(
             path=path,
-            feature_vector=self._features(final_array),
-            digest=self._file_digest(path),
+            feature_vector=image_features(image),
+            digest=file_digest(path),
         )
-
-    @staticmethod
-    def _file_digest(path: Path) -> str:
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
 
     @staticmethod
     def _hls(hue: float, lightness: float, saturation: float) -> np.ndarray:
         return np.asarray(colorsys.hls_to_rgb(hue, lightness, saturation), dtype=np.float32)
 
-    @staticmethod
-    def _features(rgb: np.ndarray) -> list[float]:
-        rgb = np.asarray(rgb, dtype=np.float32)
-        mean = rgb.mean(axis=(0, 1))
-        std = rgb.std(axis=(0, 1))
-        maximum = rgb.max(axis=2)
-        minimum = rgb.min(axis=2)
-        saturation = (maximum - minimum) / np.maximum(maximum, 1e-4)
-        luminance = 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
-        edge_x = float(np.abs(np.diff(luminance, axis=1)).mean())
-        edge_y = float(np.abs(np.diff(luminance, axis=0)).mean())
-        horizontal_symmetry = float(1.0 - np.abs(rgb - rgb[:, ::-1]).mean())
-        vertical_symmetry = float(1.0 - np.abs(rgb - rgb[::-1, :]).mean())
-        features = np.concatenate(
-            [
-                mean,
-                std,
-                np.asarray(
-                    [
-                        saturation.mean(),
-                        saturation.std(),
-                        luminance.std(),
-                        edge_x * 4.0,
-                        edge_y * 4.0,
-                        horizontal_symmetry,
-                        vertical_symmetry,
-                    ],
-                    dtype=np.float32,
-                ),
-            ]
+
+RendererFactory = Callable[[Path, int], ImageRenderer]
+
+
+def _procedural_factory(artifacts_dir: Path, size: int) -> ImageRenderer:
+    return ProceduralImageRenderer(artifacts_dir, size)
+
+
+def _local_factory(codec_id: str) -> RendererFactory:
+    def build(artifacts_dir: Path, size: int) -> ImageRenderer:
+        from .diffusers_renderer import LocalDiffusersRenderer
+
+        return LocalDiffusersRenderer(artifacts_dir, size, get_codec(codec_id))
+
+    return build
+
+
+_RENDERERS: dict[str, RendererFactory] = {
+    "procedural": _procedural_factory,
+    "flux2-klein": _local_factory("flux2-klein"),
+    "krea2-turbo": _local_factory("krea2-turbo"),
+}
+
+
+def available_renderers() -> tuple[str, ...]:
+    return tuple(sorted(_RENDERERS))
+
+
+def build_renderer(kind: str, artifacts_dir: Path, size: int) -> ImageRenderer:
+    factory = _RENDERERS.get(kind)
+    if factory is None:
+        available = ", ".join(available_renderers())
+        raise ValueError(f"unknown renderer {kind!r}; choose one of: {available}")
+    return factory(artifacts_dir, size)
+
+
+class ConfiguredRenderer:
+    """Small compatibility facade used by the existing service constructor."""
+
+    def __init__(self, artifacts_dir: Path, size: int = 640) -> None:
+        kind = os.environ.get("ART_OPTIMIZER_RENDERER", "procedural").strip().lower()
+        self._backend = build_renderer(kind, artifacts_dir, size)
+
+    @property
+    def revision(self) -> str:
+        return self._backend.revision
+
+    @property
+    def codec_revision(self) -> str:
+        return self._backend.codec_revision
+
+    @property
+    def control_basis_revision(self) -> str:
+        return self._backend.control_basis_revision
+
+    @property
+    def feature_revision(self) -> str:
+        return self._backend.feature_revision
+
+    @property
+    def action_dimension(self) -> int:
+        return self._backend.action_dimension
+
+    def capabilities(self) -> RendererCapabilities:
+        return self._backend.capabilities()
+
+    def render(
+        self,
+        *,
+        design_id: str,
+        seed: int,
+        prompt: str,
+        action: np.ndarray,
+    ) -> RenderedArtifact:
+        return self._backend.render(
+            design_id=design_id,
+            seed=seed,
+            prompt=prompt,
+            action=action,
         )
-        return np.clip(features, 0.0, 1.0).astype(float).tolist()
+
+
+# Kept so the current service import remains source compatible. New code should
+# call build_renderer explicitly.
+ProceduralRenderer = ConfiguredRenderer
