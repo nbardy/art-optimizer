@@ -1,0 +1,20 @@
+services:
+  art-optimizer:
+    build: .
+    init: true
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      ART_OPTIMIZER_DATA_DIR: /data
+      ART_OPTIMIZER_IMAGE_SIZE: "${ART_OPTIMIZER_IMAGE_SIZE:-640}"
+    volumes:
+      - art-optimizer-data:/data
+
+volumes:
+  art-optimizer-data:

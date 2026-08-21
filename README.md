@@ -1,108 +1,247 @@
 # Art Optimizer
 
-**Art Optimizer** is an open-source, human-in-the-loop interface for exploring generative image spaces without requiring users to describe every visual preference in words.
+Art Optimizer is a local, human-in-the-loop system for evolving images through lightweight visual preference feedback.
 
-The primary interaction is deliberately small:
+The interaction is intentionally small:
 
-1. one design fills the canvas;
-2. four candidate descendants sit in the corners;
-3. hovering or holding previews a candidate at full size;
-4. clicking or tapping commits it as the current design;
-5. rerolling means “the current design beats these alternatives—keep searching from here”;
-6. starring preserves a design as durable preference evidence;
-7. **New world** changes the stochastic root without forgetting the user’s broader taste.
-
-The product treats the current design as an immutable, replayable generative state—not merely a PNG. Every committed choice retains the model revision, conditioning, materialized initial noise, absolute world-level control coordinates, parent, learner checkpoint, and proposal policy needed to reproduce and branch from it.
+1. one committed design fills the canvas;
+2. four candidate descendants stream into the corners;
+3. hover or hold previews a candidate at full size;
+4. click or tap commits it;
+5. reroll says the current design beats the exposed alternatives;
+6. favorite adds durable evidence to a multimodal taste atlas;
+7. **New world** changes the stochastic root while retaining persistent taste;
+8. recent committed designs can be restored and forked.
 
 ## Status
 
-The v0 product and algorithm design is **implementation-ready**. The interaction semantics, state identities, local choice model, persistent preference atlas, and implementation gates are now normative rather than a menu of alternatives.
+The repository contains a runnable CPU reference implementation and local open-weight model stacks for:
 
-The repository remains **pre-code**. In particular, no real image model has yet passed the required replay, latency, and useful-control-basis experiments. “Implementation-ready” means engineers can build and test the system without inventing semantics; it does not claim that personalized image optimization quality has already been demonstrated.
+- `procedural` — deterministic CPU renderer used by tests and UI development;
+- `flux2-klein` — FLUX.2 Klein 4B through `Flux2KleinPipeline`;
+- `krea2-turbo` — Krea 2 Turbo through `Krea2Pipeline`.
 
-See [Implementation readiness](docs/IMPLEMENTATION_READINESS.md) for the exact verdict, empirical gates, risk register, and pull-request sequence.
+FLUX and Krea run locally through Diffusers. There is no hosted-model API adapter. The default real-model codec builds eight semantic directions directly in prompt-embedding space; a prompt-string fallback remains available for comparison.
 
-## Design thesis
+## Quick start: CPU reference renderer
 
-Art Optimizer combines three ideas:
+Python 3.11 or newer is required.
 
-- **Local interactive design search:** learn what the user wants in the current branch from a small number of comparative choices.
-- **Persistent generative recommendation:** maintain and evolve a multimodal atlas of durable taste from favorites, exports, revisits, and weak selection evidence.
-- **Controllable generation:** search a compact, bounded action manifold spanning conditioning, references, adapters, attention interventions, and—after validation—world-local directions in initial-noise space.
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+make dev
+```
 
-The first implementation uses a **contextual preferential bandit / sequential Bayesian optimizer**, not full long-horizon reinforcement learning. A round is one multinomial choice among the current anchor and meaningfully exposed candidates. Reroll selects the anchor as a weak outside-option observation.
+Open `http://localhost:8000`.
 
-Persistent taste is not one average user embedding. It is an evolving bank of coherent components that can go dormant, reactivate, guide new-world construction, and reserve explicit probability for exploration outside known taste.
+Runtime state is written to `.art-optimizer/`. The procedural renderer remains the default because it is deterministic, fast, and exercises the full UI, optimizer, persistence, streaming, and taste-atlas loop without a GPU.
 
-## Normative v0 specifications
+## Local open-weight models
 
-Use this precedence when documents differ:
+Install the optional local-model stack:
 
-1. [Interaction model v0](docs/INTERACTION_MODEL_V0.md) — exact preview, commit, favorite, reroll, New-world, exposure, and history semantics.
-2. [State and control contract](docs/STATE_AND_CONTROL_CONTRACT.md) — immutable worlds and designs, branch checkpoints, fixed world controls, and preference-snapshot identity.
-3. [V0 algorithm specification](docs/V0_ALGORITHM_SPEC.md) — absolute world controls, choice likelihood, Laplace posterior, trust region, candidate roles, and noise policy.
-4. [Persistent preference atlas](docs/PERSISTENT_PREFERENCE_ATLAS.md) — evolving multimodal preference components, evidence, lifecycle, world-context selection, and generation guidance.
-5. [Implementation readiness](docs/IMPLEMENTATION_READINESS.md) — locked decisions, remaining empirical gates, contract deltas, and implementation sequence.
-6. [Control-basis experiment](docs/CONTROL_BASIS_EXPERIMENT.md) — the blocking benchmark for choosing real model controls, bounds, calibration, and latency.
+```bash
+pip install -e ".[dev,models]"
+```
 
-## Proposed model substrate
+A Hugging Face token may be required to download a gated checkpoint:
 
-As of **2026-08-19**, the default research target is [FLUX.2 \[klein\] 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B): a four-step, Apache-2.0, open-weight model supporting text-to-image, image editing, and multi-reference generation. The architecture keeps the renderer behind an adapter so Krea 2 Turbo, SANA-Sprint, and later checkpoints can be benchmarked without rewriting the product or optimizer.
+```bash
+export HF_TOKEN=...
+```
 
-The model choice is provisional. A real adapter must pass the replay, useful-control-basis, and latency gates before becoming the supported v0 renderer.
+### FLUX.2 Klein 4B
 
-## Supporting documentation
+```bash
+ART_OPTIMIZER_MODEL=flux2-klein \
+ART_OPTIMIZER_DEVICE=cuda \
+ART_OPTIMIZER_DTYPE=bfloat16 \
+ART_OPTIMIZER_IMAGE_SIZE=1024 \
+python -m art_optimizer.app --host 0.0.0.0 --port 8000
+```
 
-- [UI design](docs/UI_DESIGN.md) — visual layout, responsive behavior, accessibility, loading, and interaction rationale.
-- [Research notes](docs/RESEARCH_NOTES.md) — Ryan Murdock, Evan Shimizu, related work, model survey, and research questions.
-- [Architecture](docs/ARCHITECTURE.md) — system boundaries, services, storage, event flow, determinism, deployment, safety, and observability.
-- [Code design](docs/CODE_DESIGN.md) — repository layout, domain types, APIs, renderer interfaces, persistence, tests, and earlier implementation sketches.
-- [Contributing](CONTRIBUTING.md) — how to propose research, interface, and implementation changes.
+### Krea 2 Turbo
 
-## Core invariants
+```bash
+ART_OPTIMIZER_MODEL=krea2-turbo \
+ART_OPTIMIZER_DEVICE=cuda \
+ART_OPTIMIZER_DTYPE=bfloat16 \
+ART_OPTIMIZER_IMAGE_SIZE=1024 \
+python -m art_optimizer.app --host 0.0.0.0 --port 8000
+```
 
-1. **Preview is not commitment.** Hover or press-and-hold may change displayed pixels, but only an explicit selection advances the branch.
-2. **A design state is generative state only.** Runtime, conditions, root noise, control basis, absolute action, and render provenance are immutable; navigation and learner snapshots live on branch checkpoints.
-3. **The anchor is the outside option.** Commit chooses a candidate over the current design; reroll chooses the current design over exposed candidates.
-4. **Reroll preserves the branch root.** It is weak local evidence, not a destructive reset or durable taste update.
-5. **New world is not a downvote.** It changes the initial-noise root and control basis while retaining the persistent preference atlas.
-6. **Integer seed adjacency has no meaning.** Search occurs in materialized noise geometry or a defined continuous subspace, never by adding numbers to a PRNG seed.
-7. **Persistent taste is multimodal.** Strong novel evidence may spawn a component; weak exploratory clicks may not.
-8. **Atlas guidance is declared.** Exemplar identities are fixed in the world control basis; candidates cannot hide different prompts or references outside their action coordinates.
-9. **The four candidates have distinct roles.** Exploitation, diverse posterior sampling, uncertainty probing, and persistent-mode/controlled surprise prevent top-four collapse.
-10. **Historical choices remain replayable.** The visible last-ten strip is a view over an immutable branch forest.
-11. **The model adapter is replaceable.** Model-specific controls do not leak into product-level session semantics.
-12. **Raw events remain facts.** Learner weighting and preference projections are rebuildable, versioned interpretations.
-13. **No real renderer is accepted without receipts.** Replay, control smoothness, latency, hardware, and model digests are measured rather than assumed.
+For constrained VRAM:
 
-## Locked v0 algorithm
+```bash
+export ART_OPTIMIZER_CPU_OFFLOAD=1
+```
 
-The first optimizer uses:
+To require pre-downloaded files and prevent network model downloads:
 
-- one bounded absolute action vector per world, with at most 16 dimensions;
-- fixed materialized root noise while the first semantic/control basis is validated;
-- a quadratic feature map over action coordinates;
-- a Bayesian linear utility model with a Laplace posterior;
-- one multinomial observation over the anchor and exposed candidates;
-- a finite Sobol/Gaussian proposal pool;
-- a branch trust region;
-- four role-specific candidates;
-- an evolving persistent preference atlas used to choose fixed world reference slots and proposal coordinates;
-- no long-horizon RL and no per-click generator fine-tuning.
+```bash
+export ART_OPTIMIZER_LOCAL_FILES_ONLY=1
+```
 
-Optional tangent-space noise coordinates are feature-gated until they pass their own replay and usefulness tests.
+To pin a specific Hugging Face model revision for reproducible research:
 
-## Clean implementation sequence
+```bash
+export ART_OPTIMIZER_MODEL_REVISION=<commit-or-tag>
+```
 
-1. **Contracts and fake renderer:** versioned schemas, pure reducers, SQLite events, semantic hashing, CI.
-2. **Interaction shell:** one canvas, four corners, preview, commit, current/candidate favorites, reroll/skip, New world, branch history.
-3. **Real renderer spike:** one adapter, root noise, absolute controls, fixed atlas slots, capability refusal, replay and latency receipts.
-4. **Local optimizer:** choice likelihood, Laplace update, trust region, four proposal roles, simulated-user baselines.
-5. **Persistent preference atlas:** evidence ledger, multimodal components, world-context/exemplar selection, privacy/export/deletion.
-6. **Integrated research release:** reproducible local setup, benchmark receipts, sample sessions, and documented failure modes.
+To compare against ordinary prompt compilation instead of embedding directions:
 
-The real model is intentionally not the first code pull request. The product state machine should be executable and fully tested with a deterministic fake renderer before GPU integration.
+```bash
+export ART_OPTIMIZER_CONDITIONING_MODE=prompt
+```
+
+The model registry is available at `GET /api/models`, and the active model, codec, conditioning mode, replay level, and license identifier are reported by `GET /healthz`.
+
+### License note
+
+Both targets expose local weights and internals. FLUX.2 Klein 4B uses Apache-2.0. Krea 2 uses the **Krea 2 Community License**, not an OSI-approved open-source license. Its community terms include a company-wide revenue threshold for commercial use and require content filtering for deployments. Read the model metadata returned by `/api/models` and the upstream license before deployment.
+
+## Embedding codec
+
+The optimizer works in one canonical action space:
+
+\[
+a \in [-1,1]^8.
+\]
+
+The shared axes are:
+
+1. close-up ↔ expansive composition;
+2. organic ↔ geometric form;
+3. cool/restrained ↔ warm/saturated palette;
+4. soft/diffuse ↔ dramatic/directional lighting;
+5. minimal ↔ intricate detail;
+6. matte/painterly ↔ glossy/translucent material;
+7. still/orderly ↔ dynamic/turbulent motion;
+8. abstract/stylized ↔ materially realistic rendering.
+
+For each world prompt, the codec encodes a base prompt and positive/negative endpoint prompts for each axis. It forms local text-embedding directions:
+
+\[
+d_i = \frac{1}{2}\left(E(p_i^+) - E(p_i^-)\right),
+\]
+
+RMS-normalizes those directions, and applies the selected quantities:
+
+\[
+E(a) = E(p_0) + \frac{\eta}{\sqrt d}\sum_i a_i d_i.
+\]
+
+FLUX and Krea have small model-specific conditioning adapters because their embedding tensors and masks differ. Everything else—the action type, codec plan, renderer request, persistence, planner, and UI contract—is shared.
+
+This is a versioned experimental control basis. It still needs coordinate-sweep and human-evaluation receipts before being described as a validated semantic space.
+
+## Running on a remote node
+
+Yes. The server and browser use ordinary HTTP plus Server-Sent Events, and generated images are served by the same process.
+
+The safest development setup is an SSH tunnel:
+
+```bash
+# On the GPU node
+python -m art_optimizer.app --host 127.0.0.1 --port 8000
+
+# On your laptop
+ssh -L 8000:127.0.0.1:8000 user@your-node
+```
+
+Then open `http://localhost:8000` on your laptop.
+
+For direct LAN/VPC access, bind to `0.0.0.0`, allow the port in the node firewall/security group, and browse to `http://NODE_IP:8000`.
+
+The development server currently has no built-in authentication or TLS. Do not expose it directly to the public Internet. Use an SSH tunnel, VPN, or authenticated HTTPS reverse proxy.
+
+## Modularity
+
+The implementation has narrow boundaries rather than model-specific branches throughout the service:
+
+```text
+canonical action
+    -> SemanticDirectionCodec
+    -> model-specific embedding adapter
+    -> ImageRenderer
+    -> RenderedArtifact
+```
+
+- **Models/codecs:** selected from one data registry. Adding a model means one profile and, only when tensor signatures differ, one small conditioning adapter.
+- **Renderer:** the service depends on the `ImageRenderer` protocol.
+- **Preference learner:** isolated in `preference.py`.
+- **Acquisition policy:** isolated in `planner.py`.
+- **Persistent memory:** isolated in `atlas.py`.
+- **UI:** consumes versioned HTTP/SSE projections and can be replaced without importing optimizer or model code. Set `ART_OPTIMIZER_STATIC_DIR` to serve another client build.
+
+The current server selects one render stack at process startup so only one large checkpoint occupies GPU memory. Algorithm and UI A/B harnesses can share the same persisted event facts; runtime hot-swapping of multiple giant checkpoints in one process is intentionally not part of v0.
+
+## Optimizer
+
+The current design is the anchor. A quadratic feature map is used:
+
+\[
+\psi(a)=
+[a_1,\ldots,a_d,\;a_1^2,\ldots,a_d^2,\;\{a_i a_j\}_{i<j}].
+\]
+
+The branch-local utility model is:
+
+\[
+f(a)=w^\top\psi(a),
+\qquad q(w)=\mathcal N(\hat w,\Sigma_w).
+\]
+
+Selecting one candidate is modeled as one multinomial choice among the anchor and meaningfully exposed candidates. Reroll selects the anchor as the outside option. A finite proposal pool combines local Gaussian points, scrambled Sobol coverage, posterior sampling, uncertainty, diversity, and compatible taste-atlas guidance.
+
+The displayed quartet has four roles:
+
+1. best local continuation;
+2. diverse posterior sample;
+3. informative uncertainty probe;
+4. controlled surprise or another persistent taste mode.
+
+## Persistence and replay
+
+SQLite stores session projections, branch checkpoints, raw interaction events, command results, learner snapshots, and the preference atlas. PNGs are accompanied by request manifests. Cached images are reused only when model, source, codec, control basis, prompt, seed, action, dimensions, and inference settings match.
+
+Real-model data is namespaced by model ID by default, preventing a missing FLUX artifact from being silently regenerated by Krea after a server restart.
+
+## Test
+
+```bash
+python -m compileall -q art_optimizer tests
+node --check art_optimizer/static/app.js
+ruff check art_optimizer tests
+python -m pytest
+```
+
+With a server running:
+
+```bash
+python scripts/smoke_test.py http://localhost:8000
+```
+
+The normal test suite does not load model weights. Model codecs and embedding conditioning are tested with injected local fake pipelines.
+
+## API
+
+```text
+GET  /healthz
+GET  /api/models
+POST /api/sessions
+GET  /api/sessions/{session_id}
+GET  /api/sessions/{session_id}/events
+GET  /api/sessions/{session_id}/event-log
+POST /api/sessions/{session_id}/candidates/{candidate_id}/commit
+POST /api/sessions/{session_id}/reroll
+POST /api/sessions/{session_id}/new-world
+POST /api/sessions/{session_id}/designs/{design_id}/favorite
+POST /api/sessions/{session_id}/history/{branch_node_id}/restore
+```
 
 ## License
 
-The repository is licensed under the [MIT License](LICENSE). Model checkpoints, datasets, and third-party dependencies retain their own licenses; the renderer must record and enforce the license attached to each configured model.
+The Art Optimizer code is licensed under the [MIT License](LICENSE). Model checkpoints, datasets, uploaded references, and generated-media obligations retain their own licenses.
