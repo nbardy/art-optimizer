@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from typing import Any
 from urllib.request import Request, urlopen
+
+REQUEST_TIMEOUT = float(os.environ.get("ART_OPTIMIZER_SMOKE_REQUEST_TIMEOUT", "900"))
+ROUND_TIMEOUT = float(os.environ.get("ART_OPTIMIZER_SMOKE_ROUND_TIMEOUT", "300"))
 
 
 def request_json(
@@ -16,13 +20,13 @@ def request_json(
     data = json.dumps(payload).encode() if payload is not None else None
     request = Request(url, data=data, method=method)
     request.add_header("Content-Type", "application/json")
-    with urlopen(request, timeout=30) as response:  # noqa: S310 - explicit local smoke target
+    with urlopen(request, timeout=REQUEST_TIMEOUT) as response:  # noqa: S310 - explicit target
         return json.load(response)
 
 
 def read_initial_sse_snapshot(url: str) -> dict[str, Any]:
     request = Request(url, method="GET")
-    with urlopen(request, timeout=30) as response:  # noqa: S310 - explicit local smoke target
+    with urlopen(request, timeout=REQUEST_TIMEOUT) as response:  # noqa: S310 - explicit target
         event_name = None
         for raw_line in response:
             line = raw_line.decode("utf-8").rstrip("\r\n")
@@ -50,15 +54,15 @@ def main() -> None:
     assert streamed["session_id"] == session_id
     print("session", session_id)
 
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + ROUND_TIMEOUT
     while time.monotonic() < deadline:
         session = request_json(f"{base}/api/sessions/{session_id}")
         candidates = (session.get("active_round") or {}).get("candidates", [])
         if len(candidates) == 4 and all(candidate["status"] == "ready" for candidate in candidates):
             break
-        time.sleep(0.2)
+        time.sleep(0.5)
     else:
-        raise SystemExit("candidate round did not become ready")
+        raise SystemExit(f"candidate round did not become ready in {ROUND_TIMEOUT:.0f}s")
 
     chosen = candidates[0]
     exposed = [candidate["candidate_id"] for candidate in candidates]
