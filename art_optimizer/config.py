@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,13 +33,26 @@ class Settings:
         return self.renderer_kind
 
     @classmethod
-    def from_env(cls) -> "Settings":
+    def from_env(cls) -> Settings:
         model_id = selected_model_id_from_env()
         profile = get_model_profile(model_id)
         root = Path(
             os.environ.get("ART_OPTIMIZER_DATA_DIR", ".art-optimizer")
         ).expanduser().resolve()
-        runtime_dir = root if model_id == "procedural" else root / model_id
+        source = os.environ.get("ART_OPTIMIZER_MODEL_SOURCE", profile.model_source)
+        revision = os.environ.get("ART_OPTIMIZER_MODEL_REVISION", "unversioned")
+        conditioning = os.environ.get(
+            "ART_OPTIMIZER_CONDITIONING_MODE", profile.default_conditioning
+        )
+        runtime_identity = "\0".join(
+            (model_id, source, revision, profile.codec_revision, conditioning)
+        )
+        runtime_fingerprint = hashlib.sha256(runtime_identity.encode("utf-8")).hexdigest()[:12]
+        runtime_dir = (
+            root
+            if model_id == "procedural"
+            else root / model_id / runtime_fingerprint
+        )
         default_size = 640 if model_id == "procedural" else 1024
         return cls(
             data_dir=runtime_dir,

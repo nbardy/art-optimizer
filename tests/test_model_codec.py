@@ -131,6 +131,10 @@ def test_model_catalog_is_local_and_explicit() -> None:
     assert catalog["krea2-turbo"]["open_weights"] is True
     assert catalog["krea2-turbo"]["osi_open_source"] is False
     assert catalog["krea2-turbo"]["content_filter_required"] is True
+    assert (
+        catalog["flux2-klein"]["control_basis_revision"]
+        != catalog["krea2-turbo"]["control_basis_revision"]
+    )
 
 
 def test_codec_compiles_prompt_and_embedding_endpoints() -> None:
@@ -226,5 +230,6 @@ def test_settings_selects_model_and_namespaces_runtime(monkeypatch, tmp_path) ->
     settings = Settings.from_env()
     assert settings.model_id == "krea2-turbo"
     assert settings.renderer_size == 1024
-    assert settings.data_dir == (tmp_path / "krea2-turbo").resolve()
+    assert settings.data_dir.parent == (tmp_path / "krea2-turbo").resolve()
+    assert len(settings.data_dir.name) == 12
     assert settings.database_path.parent == settings.data_dir
