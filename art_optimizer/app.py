@@ -18,6 +18,7 @@ from .domain import (
     NewWorldPayload,
     RestorePayload,
 )
+from .model_codec import model_catalog
 from .service import (
     ArtOptimizerService,
     ConflictError,
@@ -39,7 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await service.shutdown()
 
-    app = FastAPI(title="Art Optimizer", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Art Optimizer", version="0.3.0", lifespan=lifespan)
     app.state.service = service
     app.mount("/assets", StaticFiles(directory=settings.artifacts_dir), name="assets")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
@@ -62,14 +63,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/healthz")
     async def health() -> dict[str, object]:
+        database = service.store.integrity_check()
+        capabilities = service.renderer.capabilities()
         return {
-            "ok": service.store.integrity_check() == "ok",
-            "database": service.store.integrity_check(),
-            "renderer": service.renderer.revision,
-            "control_basis": service.renderer.control_basis_revision,
-            "feature_revision": service.renderer.feature_revision,
+            "ok": database == "ok",
+            "database": database,
+            "model": capabilities.model_id,
+            "renderer": capabilities.renderer_revision,
+            "codec": capabilities.codec_revision,
+            "control_basis": capabilities.control_basis_revision,
+            "conditioning_mode": capabilities.conditioning_mode,
+            "replay_level": capabilities.replay_level,
+            "open_weights": capabilities.open_weights,
+            "license_id": capabilities.license_id,
             "data_dir": str(settings.data_dir),
         }
+
+    @app.get("/api/models")
+    async def models() -> list[dict[str, object]]:
+        return model_catalog()
 
     @app.post("/api/sessions")
     async def create_session(request: CreateSessionRequest) -> dict[str, object]:

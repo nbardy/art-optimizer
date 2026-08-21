@@ -15,13 +15,21 @@ def make_settings(tmp_path: Path) -> Settings:
     )
 
 
-def test_health_index_and_validation(tmp_path: Path) -> None:
+def test_health_models_index_and_validation(tmp_path: Path) -> None:
     with TestClient(create_app(make_settings(tmp_path))) as client:
         health = client.get("/healthz")
         assert health.status_code == 200
         assert health.json()["ok"] is True
         assert health.json()["database"] == "ok"
-        assert health.json()["renderer"] == "procedural-field/v2"
+        assert health.json()["model"] == "procedural"
+        assert health.json()["renderer"] == "procedural-field/v4"
+        assert health.json()["codec"] == "procedural-native/v1"
+        assert health.json()["replay_level"] == "exact"
+
+        models = client.get("/api/models")
+        assert models.status_code == 200
+        model_ids = {model["model_id"] for model in models.json()}
+        assert model_ids == {"procedural", "flux2-klein", "krea2-turbo"}
 
         index = client.get("/")
         assert index.status_code == 200

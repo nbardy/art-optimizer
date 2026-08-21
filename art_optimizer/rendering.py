@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol, runtime_checkable
+from typing import Literal, Mapping, Protocol, runtime_checkable
 from uuid import uuid4
 
 import numpy as np
@@ -26,6 +27,15 @@ class RendererCapabilities:
     control_basis_revision: str
     feature_revision: str
     replay_level: ReplayLevel
+    display_name: str = ""
+    model_source: str = ""
+    license_id: str = ""
+    license_url: str = ""
+    open_weights: bool = False
+    osi_open_source: bool = False
+    content_filter_required: bool = False
+    conditioning_mode: str = "native"
+    supports_embedding_control: bool = False
 
 
 @dataclass(slots=True)
@@ -33,6 +43,7 @@ class RenderedArtifact:
     path: Path
     feature_vector: list[float]
     digest: str
+    request_digest: str = ""
 
 
 @runtime_checkable
@@ -72,6 +83,17 @@ def validate_render_input(
     if not np.isfinite(values).all():
         raise ValueError("renderer action must be finite")
     return np.clip(values, -1.0, 1.0)
+
+
+def render_request_digest(payload: Mapping[str, object]) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def file_digest(path: Path) -> str:
@@ -120,11 +142,77 @@ def image_features(image: Image.Image | np.ndarray) -> list[float]:
     return np.clip(features, 0.0, 1.0).astype(float).tolist()
 
 
+def load_cached_artifact(path: Path, expected_request_digest: str) -> RenderedArtifact | None:
+    manifest_path = artifact_manifest_path(path)
+    if not path.exists() or not manifest_path.exists():
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if manifest.get("request_digest") != expected_request_digest:
+        return None
+    digest = file_digest(path)
+    if manifest.get("image_digest") != digest:
+        return None
+    with Image.open(path) as stored:
+        image = stored.convert("RGB")
+        features = image_features(image)
+    return RenderedArtifact(
+        path=path,
+        feature_vector=features,
+        digest=digest,
+        request_digest=expected_request_digest,
+    )
+
+
+def save_rendered_artifact(
+    image: Image.Image,
+    path: Path,
+    *,
+    request_digest: str,
+    metadata: Mapping[str, object],
+) -> RenderedArtifact:
+    image = image.convert("RGB")
+    atomic_save_png(image, path)
+    digest = file_digest(path)
+    manifest = {
+        "schema": "art-optimizer-render/v1",
+        "request_digest": request_digest,
+        "image_digest": digest,
+        "metadata": dict(metadata),
+    }
+    atomic_write_json(artifact_manifest_path(path), manifest)
+    return RenderedArtifact(
+        path=path,
+        feature_vector=image_features(image),
+        digest=digest,
+        request_digest=request_digest,
+    )
+
+
+def artifact_manifest_path(path: Path) -> Path:
+    return path.with_suffix(f"{path.suffix}.json")
+
+
 def atomic_save_png(image: Image.Image, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     try:
         image.convert("RGB").save(temporary, format="PNG", optimize=True)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False),
+            encoding="utf-8",
+        )
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)

@@ -3,21 +3,26 @@ from __future__ import annotations
 import colorsys
 import hashlib
 import math
-import os
 from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageFilter
 
-from .model_codec import get_codec
+from .model_codec import (
+    ModelProfile,
+    available_model_ids,
+    get_codec,
+    get_model_profile,
+    selected_model_id_from_env,
+)
 from .rendering import (
     ImageRenderer,
     RenderedArtifact,
     RendererCapabilities,
-    atomic_save_png,
-    file_digest,
-    image_features,
+    load_cached_artifact,
+    render_request_digest,
+    save_rendered_artifact,
     validate_render_input,
 )
 
@@ -25,15 +30,15 @@ from .rendering import (
 class ProceduralImageRenderer:
     """Deterministic CPU renderer for interaction and optimizer tests."""
 
-    revision = "procedural-field/v3"
+    revision = "procedural-field/v4"
     codec_revision = "procedural-native/v1"
     control_basis_revision = "procedural-global-8d/v1"
     feature_revision = "rgb-summary-13d/v1"
     action_dimension = 8
 
     def __init__(self, artifacts_dir: Path, size: int = 640) -> None:
-        if not 64 <= size <= 2048:
-            raise ValueError("renderer size must be between 64 and 2048")
+        get_model_profile("procedural").validate_size(size)
+        self.profile = get_model_profile("procedural")
         self.artifacts_dir = artifacts_dir
         self.size = size
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -42,7 +47,9 @@ class ProceduralImageRenderer:
 
     def capabilities(self) -> RendererCapabilities:
         return RendererCapabilities(
-            model_id="procedural",
+            model_id=self.profile.model_id,
+            display_name=self.profile.display_name,
+            model_source=self.profile.model_source,
             action_dimension=self.action_dimension,
             deterministic=True,
             supports_batching=False,
@@ -51,6 +58,13 @@ class ProceduralImageRenderer:
             control_basis_revision=self.control_basis_revision,
             feature_revision=self.feature_revision,
             replay_level="exact",
+            license_id=self.profile.license_id,
+            license_url=self.profile.license_url,
+            open_weights=self.profile.open_weights,
+            osi_open_source=self.profile.osi_open_source,
+            content_filter_required=self.profile.content_filter_required,
+            conditioning_mode="native",
+            supports_embedding_control=False,
         )
 
     def render(
@@ -67,12 +81,21 @@ class ProceduralImageRenderer:
             action=action,
             action_dimension=self.action_dimension,
         )
+        request_payload = {
+            "model_id": self.profile.model_id,
+            "renderer_revision": self.revision,
+            "codec_revision": self.codec_revision,
+            "control_basis_revision": self.control_basis_revision,
+            "prompt": " ".join(prompt.split()),
+            "seed": seed,
+            "action": action.astype(float).tolist(),
+            "size": self.size,
+        }
+        request_hash = render_request_digest(request_payload)
         path = self.artifacts_dir / f"{design_id}.png"
-        if path.exists():
-            with Image.open(path) as stored:
-                image = stored.convert("RGB")
-                features = image_features(image)
-            return RenderedArtifact(path=path, feature_vector=features, digest=file_digest(path))
+        cached = load_cached_artifact(path, request_hash)
+        if cached is not None:
+            return cached
 
         prompt_hash = int.from_bytes(hashlib.sha256(prompt.encode("utf-8")).digest()[:8], "little")
         rng = np.random.default_rng((seed ^ prompt_hash) & ((1 << 63) - 1))
@@ -167,11 +190,11 @@ class ProceduralImageRenderer:
         image = Image.fromarray((rgb * 255.0).astype(np.uint8))
         if texture < 0.025:
             image = image.filter(ImageFilter.GaussianBlur(radius=0.35))
-        atomic_save_png(image, path)
-        return RenderedArtifact(
-            path=path,
-            feature_vector=image_features(image),
-            digest=file_digest(path),
+        return save_rendered_artifact(
+            image,
+            path,
+            request_digest=request_hash,
+            metadata=request_payload,
         )
 
     @staticmethod
@@ -179,47 +202,49 @@ class ProceduralImageRenderer:
         return np.asarray(colorsys.hls_to_rgb(hue, lightness, saturation), dtype=np.float32)
 
 
-RendererFactory = Callable[[Path, int], ImageRenderer]
+BackendFactory = Callable[[ModelProfile, Path, int], ImageRenderer]
 
 
-def _procedural_factory(artifacts_dir: Path, size: int) -> ImageRenderer:
+def _procedural_factory(_profile: ModelProfile, artifacts_dir: Path, size: int) -> ImageRenderer:
     return ProceduralImageRenderer(artifacts_dir, size)
 
 
-def _local_factory(codec_id: str) -> RendererFactory:
-    def build(artifacts_dir: Path, size: int) -> ImageRenderer:
-        from .diffusers_renderer import LocalDiffusersRenderer
+def _diffusers_factory(profile: ModelProfile, artifacts_dir: Path, size: int) -> ImageRenderer:
+    from .diffusers_renderer import LocalDiffusersRenderer
 
-        return LocalDiffusersRenderer(artifacts_dir, size, get_codec(codec_id))
-
-    return build
+    return LocalDiffusersRenderer(artifacts_dir, size, get_codec(profile.model_id))
 
 
-_RENDERERS: dict[str, RendererFactory] = {
+_BACKENDS: dict[str, BackendFactory] = {
     "procedural": _procedural_factory,
-    "flux2-klein": _local_factory("flux2-klein"),
-    "krea2-turbo": _local_factory("krea2-turbo"),
+    "diffusers": _diffusers_factory,
 }
 
 
 def available_renderers() -> tuple[str, ...]:
-    return tuple(sorted(_RENDERERS))
+    return available_model_ids()
 
 
-def build_renderer(kind: str, artifacts_dir: Path, size: int) -> ImageRenderer:
-    factory = _RENDERERS.get(kind)
-    if factory is None:
-        available = ", ".join(available_renderers())
-        raise ValueError(f"unknown renderer {kind!r}; choose one of: {available}")
-    return factory(artifacts_dir, size)
+def build_renderer(model_id: str, artifacts_dir: Path, size: int) -> ImageRenderer:
+    profile = get_model_profile(model_id)
+    factory = _BACKENDS[profile.backend]
+    return factory(profile, artifacts_dir, size)
 
 
 class ConfiguredRenderer:
-    """Small compatibility facade used by the existing service constructor."""
+    """Compatibility facade; the registry remains the only model dispatch point."""
 
-    def __init__(self, artifacts_dir: Path, size: int = 640) -> None:
-        kind = os.environ.get("ART_OPTIMIZER_RENDERER", "procedural").strip().lower()
-        self._backend = build_renderer(kind, artifacts_dir, size)
+    def __init__(
+        self,
+        artifacts_dir: Path,
+        size: int = 640,
+        model_id: str | None = None,
+    ) -> None:
+        self._backend = build_renderer(
+            model_id or selected_model_id_from_env(),
+            artifacts_dir,
+            size,
+        )
 
     @property
     def revision(self) -> str:
@@ -260,6 +285,4 @@ class ConfiguredRenderer:
         )
 
 
-# Kept so the current service import remains source compatible. New code should
-# call build_renderer explicitly.
 ProceduralRenderer = ConfiguredRenderer

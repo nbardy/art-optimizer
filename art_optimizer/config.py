@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from .model_codec import get_model_profile, selected_model_id_from_env
+
 
 @dataclass(frozen=True, slots=True)
 class Settings:
@@ -16,32 +18,53 @@ class Settings:
     renderer_kind: str = "procedural"
 
     def __post_init__(self) -> None:
-        if not 64 <= self.renderer_size <= 2048:
-            raise ValueError("renderer_size must be between 64 and 2048 pixels")
-        if not 1 <= self.action_dimension <= 16:
-            raise ValueError("action_dimension must be between 1 and 16")
+        profile = get_model_profile(self.renderer_kind)
+        profile.validate_size(self.renderer_size)
+        if self.action_dimension != profile.action_dimension:
+            raise ValueError(
+                f"{profile.model_id} requires action_dimension={profile.action_dimension}"
+            )
         if self.candidate_count != 4:
             raise ValueError("the v0 interaction requires exactly four candidates")
-        if self.renderer_kind not in {"procedural"}:
-            raise ValueError(f"unsupported renderer kind: {self.renderer_kind}")
-        if self.renderer_kind == "procedural" and self.action_dimension != 8:
-            raise ValueError("the procedural renderer requires action_dimension=8")
+
+    @property
+    def model_id(self) -> str:
+        return self.renderer_kind
 
     @classmethod
     def from_env(cls) -> "Settings":
-        data_dir = Path(os.environ.get("ART_OPTIMIZER_DATA_DIR", ".art-optimizer")).expanduser().resolve()
+        model_id = selected_model_id_from_env()
+        profile = get_model_profile(model_id)
+        root = Path(
+            os.environ.get("ART_OPTIMIZER_DATA_DIR", ".art-optimizer")
+        ).expanduser().resolve()
+        runtime_dir = root if model_id == "procedural" else root / model_id
+        default_size = 640 if model_id == "procedural" else 1024
         return cls(
-            data_dir=data_dir,
+            data_dir=runtime_dir,
             database_path=Path(
-                os.environ.get("ART_OPTIMIZER_DATABASE_PATH", str(data_dir / "art_optimizer.sqlite3"))
+                os.environ.get(
+                    "ART_OPTIMIZER_DATABASE_PATH",
+                    str(runtime_dir / "art_optimizer.sqlite3"),
+                )
             ).expanduser().resolve(),
             artifacts_dir=Path(
-                os.environ.get("ART_OPTIMIZER_ARTIFACTS_DIR", str(data_dir / "artifacts"))
+                os.environ.get(
+                    "ART_OPTIMIZER_ARTIFACTS_DIR",
+                    str(runtime_dir / "artifacts"),
+                )
             ).expanduser().resolve(),
-            renderer_size=int(os.environ.get("ART_OPTIMIZER_IMAGE_SIZE", "640")),
-            action_dimension=int(os.environ.get("ART_OPTIMIZER_ACTION_DIMENSION", "8")),
+            renderer_size=int(
+                os.environ.get("ART_OPTIMIZER_IMAGE_SIZE", str(default_size))
+            ),
+            action_dimension=int(
+                os.environ.get(
+                    "ART_OPTIMIZER_ACTION_DIMENSION",
+                    str(profile.action_dimension),
+                )
+            ),
             candidate_count=int(os.environ.get("ART_OPTIMIZER_CANDIDATE_COUNT", "4")),
-            renderer_kind=os.environ.get("ART_OPTIMIZER_RENDERER", "procedural").strip().lower(),
+            renderer_kind=model_id,
         )
 
     def ensure_directories(self) -> None:
