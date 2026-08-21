@@ -81,7 +81,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "conditioning_mode": capabilities.conditioning_mode,
             "replay_level": capabilities.replay_level,
             "open_weights": capabilities.open_weights,
+            "osi_open_source": capabilities.osi_open_source,
+            "content_filter_required": capabilities.content_filter_required,
             "license_id": capabilities.license_id,
+            "license_url": capabilities.license_url,
             "data_dir": str(settings.data_dir),
         }
 

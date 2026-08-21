@@ -25,6 +25,8 @@ def test_health_models_index_and_validation(tmp_path: Path) -> None:
         assert health.json()["renderer"] == "procedural-field/v4"
         assert health.json()["codec"] == "procedural-native/v1"
         assert health.json()["replay_level"] == "exact"
+        assert health.json()["osi_open_source"] is True
+        assert health.json()["content_filter_required"] is False
 
         models = client.get("/api/models")
         assert models.status_code == 200
