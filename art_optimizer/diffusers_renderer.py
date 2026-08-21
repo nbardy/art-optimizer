@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import importlib.metadata
 import importlib.util
 import os
 import threading
@@ -60,6 +61,9 @@ class LocalDiffusersRenderer:
         self.model_source = model_source or os.environ.get(
             "ART_OPTIMIZER_MODEL_SOURCE", self.profile.model_source
         )
+        self.model_revision = os.environ.get("ART_OPTIMIZER_MODEL_REVISION") or None
+        self.diffusers_version = _package_version("diffusers")
+        self.torch_version = _package_version("torch")
         self.device = device or os.environ.get("ART_OPTIMIZER_DEVICE", "cuda")
         self.dtype = dtype or os.environ.get("ART_OPTIMIZER_DTYPE", "bfloat16")
         if self.dtype not in _DTYPE_NAMES:
@@ -147,6 +151,10 @@ class LocalDiffusersRenderer:
             "codec_revision": request.codec_revision,
             "control_basis_revision": request.control_basis_revision,
             "conditioning_mode": self.conditioning_mode,
+            "embedding_strength": request.embedding_strength,
+            "model_revision": self.model_revision,
+            "diffusers_version": self.diffusers_version,
+            "torch_version": self.torch_version,
             "prompt": request.base_prompt,
             "action": values.astype(float).tolist(),
             "seed": request.seed,
@@ -235,6 +243,8 @@ class LocalDiffusersRenderer:
             "local_files_only": self.local_files_only,
             "trust_remote_code": False,
         }
+        if self.model_revision:
+            load_kwargs["revision"] = self.model_revision
         token = os.environ.get("HF_TOKEN")
         if token:
             load_kwargs["token"] = token
@@ -251,3 +261,10 @@ class LocalDiffusersRenderer:
 def _env_flag(name: str, default: bool) -> bool:
     value = os.environ.get(name)
     return default if value is None else value.strip().lower() in _TRUE_VALUES
+
+
+def _package_version(name: str) -> str:
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return "not-installed"

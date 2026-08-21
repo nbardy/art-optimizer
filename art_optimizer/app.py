@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from .composition import ConfiguredArtOptimizerService
 from .config import Settings
 from .domain import (
     CommitPayload,
@@ -20,7 +21,6 @@ from .domain import (
 )
 from .model_codec import model_catalog
 from .service import (
-    ArtOptimizerService,
     ConflictError,
     NotFoundError,
     OperationError,
@@ -30,7 +30,7 @@ from .service import (
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.ensure_directories()
-    service = ArtOptimizerService(settings)
+    service = ConfiguredArtOptimizerService(settings)
     static_dir = Path(__file__).with_name("static")
 
     @asynccontextmanager
