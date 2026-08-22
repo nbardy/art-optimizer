@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator
 
 import numpy as np
 
-from .atlas import PersistentPreferenceAtlas
+from .atlas import AtlasGuidance, PersistentPreferenceAtlas
 from .config import Settings
 from .domain import (
     BranchNode,
@@ -32,6 +32,7 @@ from .event_store import EventStore
 from .planner import CandidatePlanner, PlannerContext
 from .preference import BayesianChoiceModel
 from .renderer import ProceduralRenderer
+from .rendering import ImageRenderer, artifact_manifest_path
 
 
 class NotFoundError(KeyError):
@@ -56,16 +57,33 @@ class SessionRuntime:
 
 
 class ArtOptimizerService:
-    def __init__(self, settings: Settings) -> None:
+    """Authoritative interaction state machine with injected experiment seams.
+
+    The service owns session transitions exactly once. Renderers, planners, stores,
+    and persistent-memory implementations are dependencies rather than subclasses,
+    so model/UI experiments cannot fork the branch/world semantics accidentally.
+    """
+
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        renderer: ImageRenderer | None = None,
+        planner: CandidatePlanner | None = None,
+        store: EventStore | None = None,
+        atlas: PersistentPreferenceAtlas | None = None,
+    ) -> None:
         self.settings = settings
         self.settings.ensure_directories()
-        self.store = EventStore(settings.database_path)
-        self.renderer = ProceduralRenderer(settings.artifacts_dir, settings.renderer_size)
+        self.store = store or EventStore(settings.database_path)
+        self.renderer = renderer or ProceduralRenderer(
+            settings.artifacts_dir, settings.renderer_size
+        )
         capabilities = self.renderer.capabilities()
         if capabilities.action_dimension != settings.action_dimension:
             raise ValueError("renderer and configured action dimensions do not match")
-        self.planner = CandidatePlanner(settings.action_dimension)
-        self.atlas = PersistentPreferenceAtlas(self.store.load_atlas())
+        self.planner = planner or CandidatePlanner(capabilities.action_dimension)
+        self.atlas = atlas or PersistentPreferenceAtlas(self.store.load_atlas())
         self._atlas_lock = asyncio.Lock()
         self._runtime_load_lock = asyncio.Lock()
         self._sessions: dict[str, SessionRuntime] = {}
@@ -126,8 +144,12 @@ class ArtOptimizerService:
             root_design_id=root_design_id,
             renderer_revision=self.renderer.revision,
             control_basis_revision=self.renderer.control_basis_revision,
+            initialization_mode="taste_guided",
+            initialization_action=action.astype(float).tolist(),
             atlas_component_id=guidance.component_id,
-            atlas_bias_action=guidance.action_bias.tolist() if guidance.action_bias is not None else None,
+            atlas_bias_action=(
+                guidance.action_bias.tolist() if guidance.action_bias is not None else None
+            ),
         )
         state = SessionState(
             session_id=session_id,
@@ -153,6 +175,8 @@ class ArtOptimizerService:
                 "root_design_id": root_design_id,
                 "seed": seed,
                 "prompt": request.prompt,
+                "mode": "taste_guided",
+                "initial_action": action.astype(float).tolist(),
                 "atlas_component_id": guidance.component_id,
                 "atlas_mode": guidance.mode,
                 "renderer_revision": self.renderer.revision,
@@ -430,6 +454,15 @@ class ArtOptimizerService:
         session_id: str,
         payload: NewWorldPayload,
     ) -> dict[str, Any]:
+        """Create a new stochastic root through one shared transition path.
+
+        Only root-action selection varies by policy. Transition, rendering,
+        persistence, failure recovery, and round creation remain identical across
+        `taste_guided`, `neutral`, and `composition` so UI experiments cannot
+        diverge in hidden state semantics.
+        """
+
+        self._validate_world_payload(payload)
         runtime = await self._get_runtime(session_id)
         async with runtime.command_lock:
             cached = self._cached_command(session_id, payload.request_id, "new_world")
@@ -452,6 +485,8 @@ class ArtOptimizerService:
                     {
                         "request_id": payload.request_id,
                         "source_design_id": state.current_design_id,
+                        "mode": payload.mode,
+                        "target_action": payload.target_action,
                         "mutation_version": state.mutation_version,
                     },
                 )
@@ -461,17 +496,8 @@ class ArtOptimizerService:
 
             seed = secrets.randbits(62)
             rng = np.random.default_rng(seed)
-            async with self._atlas_lock:
-                guidance = self.atlas.choose_guidance(
-                    rng,
-                    control_basis_revision=self.renderer.control_basis_revision,
-                    action_dimension=self.settings.action_dimension,
-                )
-
-            action = rng.normal(0.0, 0.30, size=self.settings.action_dimension)
-            if guidance.action_bias is not None:
-                action = 0.68 * guidance.action_bias + 0.32 * action
-            action = np.clip(action, -0.78, 0.78)
+            guidance = await self._world_guidance(payload, rng)
+            action = self._root_action(payload, rng, guidance.action_bias)
             world_id = new_id("world")
             root_design_id = new_id("design")
             try:
@@ -492,7 +518,11 @@ class ArtOptimizerService:
                         self.store.record_session_event(
                             state,
                             "new_world_failed",
-                            {"request_id": payload.request_id, "error": str(error)},
+                            {
+                                "request_id": payload.request_id,
+                                "mode": payload.mode,
+                                "error": str(error),
+                            },
                         )
                 await self._publish_snapshot(runtime)
                 await self._start_round(runtime)
@@ -521,6 +551,8 @@ class ArtOptimizerService:
                 root_design_id=root_design_id,
                 renderer_revision=self.renderer.revision,
                 control_basis_revision=self.renderer.control_basis_revision,
+                initialization_mode=payload.mode,
+                initialization_action=action.astype(float).tolist(),
                 atlas_component_id=guidance.component_id,
                 atlas_bias_action=(
                     guidance.action_bias.tolist() if guidance.action_bias is not None else None
@@ -531,6 +563,7 @@ class ArtOptimizerService:
                 state = runtime.state
                 if state.transition_id != payload.request_id:
                     artifact.path.unlink(missing_ok=True)
+                    artifact_manifest_path(artifact.path).unlink(missing_ok=True)
                     raise ConflictError("new-world transition was superseded")
                 state.world = world
                 state.worlds[world_id] = world
@@ -552,6 +585,8 @@ class ArtOptimizerService:
                         "world_id": world_id,
                         "root_design_id": root_design_id,
                         "seed": seed,
+                        "mode": payload.mode,
+                        "initial_action": action.astype(float).tolist(),
                         "atlas_component_id": guidance.component_id,
                         "atlas_mode": guidance.mode,
                         "renderer_revision": self.renderer.revision,
@@ -776,6 +811,7 @@ class ArtOptimizerService:
                 round_state = state.active_round
                 if round_state is None or round_state.round_id != round_id:
                     artifact.path.unlink(missing_ok=True)
+                    artifact_manifest_path(artifact.path).unlink(missing_ok=True)
                     return
                 candidate = next(
                     (item for item in round_state.candidates if item.candidate_id == candidate_id),
@@ -783,6 +819,7 @@ class ArtOptimizerService:
                 )
                 if candidate is None:
                     artifact.path.unlink(missing_ok=True)
+                    artifact_manifest_path(artifact.path).unlink(missing_ok=True)
                     return
                 design = self._design_from_artifact(
                     design_id=stable_design_id,
@@ -1013,6 +1050,46 @@ class ArtOptimizerService:
                 f"current {state.mutation_version}"
             )
 
+    def _validate_world_payload(self, payload: NewWorldPayload) -> None:
+        if payload.mode != "composition":
+            return
+        if payload.target_action is None or len(payload.target_action) != self.settings.action_dimension:
+            raise ConflictError(
+                f"composition requires {self.settings.action_dimension} controls"
+            )
+
+    async def _world_guidance(
+        self,
+        payload: NewWorldPayload,
+        rng: np.random.Generator,
+    ) -> AtlasGuidance:
+        if payload.mode != "taste_guided":
+            return AtlasGuidance(component_id=None, action_bias=None, mode=payload.mode)
+        async with self._atlas_lock:
+            return self.atlas.choose_guidance(
+                rng,
+                control_basis_revision=self.renderer.control_basis_revision,
+                action_dimension=self.settings.action_dimension,
+            )
+
+    def _root_action(
+        self,
+        payload: NewWorldPayload,
+        rng: np.random.Generator,
+        atlas_bias: np.ndarray | None,
+    ) -> np.ndarray:
+        if payload.mode == "neutral":
+            return np.zeros(self.settings.action_dimension, dtype=np.float64)
+        if payload.mode == "composition":
+            if payload.target_action is None:
+                raise ConflictError("composition requires target_action")
+            return np.clip(np.asarray(payload.target_action, dtype=np.float64), -1.0, 1.0)
+
+        action = rng.normal(0.0, 0.30, size=self.settings.action_dimension)
+        if atlas_bias is not None:
+            action = 0.68 * atlas_bias + 0.32 * action
+        return np.clip(action, -0.78, 0.78)
+
     @staticmethod
     def _remember_branch(state: SessionState, branch_node_id: str) -> None:
         state.history = [item for item in state.history if item != branch_node_id]
@@ -1086,4 +1163,5 @@ class ArtOptimizerService:
             root_design_id=root.design_id,
             renderer_revision=root.renderer_revision,
             control_basis_revision=root.control_basis_revision,
+            initialization_action=root.action,
         )
