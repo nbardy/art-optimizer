@@ -6,11 +6,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .composition import ConfiguredArtOptimizerService
+from .composition import build_service
 from .config import Settings
 from .domain import (
     CommitPayload,
@@ -21,23 +21,34 @@ from .domain import (
     RestorePayload,
 )
 from .model_codec import model_catalog
-from .service import (
-    ConflictError,
-    NotFoundError,
-    OperationError,
+from .service import ConflictError, NotFoundError, OperationError
+from .ui_experiments import (
+    get_ui_experiment,
+    selected_ui_id,
+    ui_catalog,
+    validate_ui_files,
 )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.ensure_directories()
-    service = ConfiguredArtOptimizerService(settings)
-    default_static_dir = Path(__file__).with_name("static")
+    service = build_service(settings)
+    default_static_dir = Path(__file__).with_name("static").resolve()
     static_dir = Path(
         os.environ.get("ART_OPTIMIZER_STATIC_DIR", str(default_static_dir))
     ).expanduser().resolve()
-    if not (static_dir / "index.html").is_file():
-        raise ValueError(f"UI directory has no index.html: {static_dir}")
+    bundled_ui = static_dir == default_static_dir
+    if bundled_ui:
+        validate_ui_files(static_dir)
+        default_ui = get_ui_experiment(selected_ui_id())
+        root_filename = default_ui.filename
+        active_ui_id = default_ui.experiment_id
+    else:
+        root_filename = "index.html"
+        if not (static_dir / root_filename).is_file():
+            raise ValueError(f"custom UI directory has no index.html: {static_dir}")
+        active_ui_id = "custom"
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -46,7 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await service.shutdown()
 
-    app = FastAPI(title="Art Optimizer", version="0.3.0", lifespan=lifespan)
+    app = FastAPI(title="Art Optimizer", version="0.4.0", lifespan=lifespan)
     app.state.service = service
     app.mount("/assets", StaticFiles(directory=settings.artifacts_dir), name="assets")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
@@ -65,7 +76,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/")
     async def index() -> FileResponse:
-        return FileResponse(static_dir / "index.html")
+        return FileResponse(static_dir / root_filename)
+
+    @app.get("/ui/{experiment_id}")
+    async def experiment_ui(experiment_id: str) -> FileResponse:
+        if not bundled_ui:
+            raise HTTPException(
+                status_code=404,
+                detail="bundled UI experiments are unavailable under ART_OPTIMIZER_STATIC_DIR",
+            )
+        try:
+            experiment = get_ui_experiment(experiment_id)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error).strip("'")) from error
+        return FileResponse(static_dir / experiment.filename)
 
     @app.get("/healthz")
     async def health() -> dict[str, object]:
@@ -85,12 +109,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "content_filter_required": capabilities.content_filter_required,
             "license_id": capabilities.license_id,
             "license_url": capabilities.license_url,
+            "ui": active_ui_id,
             "data_dir": str(settings.data_dir),
         }
 
     @app.get("/api/models")
     async def models() -> list[dict[str, object]]:
         return model_catalog()
+
+    @app.get("/api/ui-experiments")
+    async def ui_experiments() -> list[dict[str, str]]:
+        return ui_catalog()
 
     @app.post("/api/sessions")
     async def create_session(request: CreateSessionRequest) -> dict[str, object]:

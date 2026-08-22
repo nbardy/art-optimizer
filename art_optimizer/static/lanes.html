@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#070707" />
+    <title>Art Optimizer — Lane Board</title>
+    <link rel="stylesheet" href="/static/experiment_styles.css" />
+  </head>
+  <body>
+    <section id="start-screen" class="experiment-start">
+      <div class="experiment-start-card">
+        <span class="experiment-kicker">UI experiment C · visible search structure</span>
+        <h1>Lane board</h1>
+        <p>
+          The same four candidates are organized by meaning: extending the active composition,
+          reopening a learned but inactive direction, or discovering a direction the library does not explain.
+        </p>
+        <form id="start-form">
+          <textarea id="prompt" rows="3" aria-label="Initial conditions">an evolving impossible garden</textarea>
+          <button class="primary" type="submit">Create world</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="studio" class="experiment-shell lanes-shell hidden">
+      <header class="experiment-topbar">
+        <div>
+          <span class="experiment-brand">ART OPTIMIZER</span>
+          <span id="world-label" class="experiment-meta"></span>
+        </div>
+        <nav id="experiment-switcher" class="experiment-switcher" aria-label="UI experiment"></nav>
+        <div class="experiment-meta">
+          <span id="learning-label"></span>
+          <span id="connection-label" class="connection">offline</span>
+        </div>
+      </header>
+
+      <section class="image-stage lanes-hero">
+        <img id="current-image" class="main-image current-image" alt="Current committed design" />
+        <img id="preview-image" class="main-image preview-image hidden" alt="Candidate preview" />
+        <div id="stage-caption" class="stage-caption">CURRENT DESIGN</div>
+      </section>
+
+      <main id="lane-board" class="lane-board">
+        <section class="lane-column" data-lane="active">
+          <header>
+            <span class="lane-title">Active composition</span>
+            <p>Moves that reinforce the concept mix currently switched on.</p>
+            <div id="active-concept-strip" class="lane-composition-strip"></div>
+          </header>
+          <div id="active-candidates" class="lane-candidates"></div>
+        </section>
+        <section class="lane-column" data-lane="alternate">
+          <header>
+            <span class="lane-title">Alternate lane</span>
+            <p>Moves that resemble a learned direction currently muted or uncertain.</p>
+            <div id="alternate-concept-strip" class="lane-composition-strip"></div>
+          </header>
+          <div id="alternate-candidates" class="lane-candidates"></div>
+        </section>
+        <section class="lane-column" data-lane="discovery">
+          <header>
+            <span class="lane-title">Discovery</span>
+            <p>Moves not yet explained by the concept library.</p>
+          </header>
+          <div id="discovery-candidates" class="lane-candidates"></div>
+        </section>
+      </main>
+
+      <footer class="command-row">
+        <button id="favorite-current" class="secondary" type="button">☆ Favorite current</button>
+        <button id="reroll" class="secondary" type="button">Reroll all lanes</button>
+        <button id="recast" class="primary" type="button">Reset image from active lanes</button>
+        <button id="new-world" class="secondary" type="button">New taste-guided world</button>
+        <button id="concept-toggle" class="secondary" type="button">Manage lanes</button>
+        <button id="history-toggle" class="secondary" type="button">History</button>
+      </footer>
+
+      <aside id="concept-drawer" class="drawer hidden" aria-label="Concept lanes">
+        <div class="drawer-header">
+          <div><span class="section-kicker">Composition state</span><h2>Concept lanes</h2></div>
+          <button id="concept-close" class="secondary" type="button">Close</button>
+        </div>
+        <div id="concept-list" class="concept-list"></div>
+      </aside>
+      <aside id="history-drawer" class="drawer hidden" aria-label="History">
+        <div class="drawer-header">
+          <div><span class="section-kicker">Recoverable state</span><h2>Recent designs</h2></div>
+          <button id="history-close" class="secondary" type="button">Close</button>
+        </div>
+        <div id="history-strip" class="history-strip"></div>
+      </aside>
+      <div id="toast" class="toast hidden" role="status"></div>
+    </section>
+    <script type="module" src="/static/ui_lanes.js"></script>
+  </body>
+</html>

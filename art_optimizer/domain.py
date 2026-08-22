@@ -35,6 +35,7 @@ CandidateRole = Literal[
 ]
 
 CandidateStatus = Literal["queued", "rendering", "ready", "failed", "cancelled"]
+WorldResetMode = Literal["taste_guided", "neutral", "composition"]
 
 
 class GaussianSnapshot(ContractModel):
@@ -65,6 +66,13 @@ class SearchState(ContractModel):
 
 
 class DesignState(ContractModel):
+    """One immutable rendered point in a declared world/control basis.
+
+    Learner and navigation state intentionally live in `BranchNode`; the same
+    image can be revisited from more than one search context without changing its
+    generative identity.
+    """
+
     design_id: str
     world_id: str
     parent_design_id: str | None = None
@@ -90,6 +98,8 @@ class DesignState(ContractModel):
 
 
 class BranchNode(ContractModel):
+    """A navigation checkpoint plus the local learner state active at that point."""
+
     branch_node_id: str
     design_id: str
     parent_branch_node_id: str | None = None
@@ -119,6 +129,8 @@ class CandidateProposal(ContractModel):
 
 
 class CandidateRound(ContractModel):
+    """The temporary four-option query tied to one branch mutation version."""
+
     round_id: str
     parent_design_id: str
     parent_branch_node_id: str
@@ -142,22 +154,43 @@ class CandidateRound(ContractModel):
 
 
 class WorldState(ContractModel):
+    """Immutable generation conditions shared by every design in one world.
+
+    A world can start from persistent taste, the neutral control origin, or an
+    explicit concept composition. The root action remains in the root
+    `DesignState`; these fields explain why that action was chosen.
+    """
+
     world_id: str
     seed: int = Field(ge=0, le=MAX_SEED)
     prompt: str
     root_design_id: str
     renderer_revision: str = "procedural-field/v2"
     control_basis_revision: str = "procedural-global-8d/v1"
+    initialization_mode: WorldResetMode = "taste_guided"
+    initialization_action: list[float] | None = None
     atlas_component_id: str | None = None
     atlas_bias_action: list[float] | None = None
     created_at: str = Field(default_factory=utc_now)
 
+    @field_validator("initialization_action", "atlas_bias_action")
+    @classmethod
+    def validate_optional_action(cls, value: list[float] | None) -> list[float] | None:
+        if value is not None and (not value or not _all_finite(value)):
+            raise ValueError("world action vectors must be non-empty and finite")
+        return value
+
 
 class SessionState(ContractModel):
+    """Authoritative projection for one local interactive session.
+
+    `version` changes for every visible update, including candidate render
+    progress. `mutation_version` changes only for user commands, so an image
+    finishing in the background never makes an otherwise-valid commit stale.
+    """
+
     session_id: str
     user_id: str = "local-user"
-    # `version` changes for every visible projection update. `mutation_version`
-    # changes only for branch/world commands and is safe for optimistic writes.
     version: int = Field(default=0, ge=0)
     mutation_version: int = Field(default=0, ge=0)
     prompt: str
@@ -236,7 +269,27 @@ class FavoritePayload(CommandPayload):
 
 
 class NewWorldPayload(CommandPayload):
-    pass
+    """Create another stochastic realization.
+
+    `taste_guided` preserves the existing atlas behavior. `neutral` starts at the
+    control-space origin. `composition` starts at a client- or experiment-owned
+    concept composition. The server still validates the vector against the active
+    model basis; the UI never gets to change a world's hidden conditions.
+    """
+
+    mode: WorldResetMode = "taste_guided"
+    target_action: list[float] | None = Field(default=None, min_length=1, max_length=16)
+
+    @model_validator(mode="after")
+    def validate_composition(self) -> Self:
+        if self.mode == "composition":
+            if self.target_action is None:
+                raise ValueError("composition mode requires target_action")
+            if not _all_finite(self.target_action):
+                raise ValueError("target_action must be finite")
+        elif self.target_action is not None:
+            raise ValueError("target_action is only valid in composition mode")
+        return self
 
 
 class RestorePayload(CommandPayload):
