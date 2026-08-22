@@ -1,40 +1,60 @@
 # Art Optimizer
 
-Art Optimizer is a local, human-in-the-loop system for evolving images through lightweight visual preference feedback.
+Art Optimizer is an open research platform for human-in-the-loop image search, image-evolution experiments, and persistent visual preference learning.
 
-The interaction is intentionally small:
+## Current status
 
-1. one committed design fills the canvas;
-2. four candidate descendants stream into the corners;
-3. hover or hold previews a candidate at full size;
-4. click or tap commits it;
-5. reroll says the current design beats the exposed alternatives;
-6. favorite adds durable evidence to a multimodal taste atlas;
-7. **New world** changes the stochastic root while retaining persistent taste;
-8. recent committed designs can be restored and forked.
+The current runnable treatment is **T0 Controlled Search**:
 
-## Status
+```text
+prompt-conditioned control chart
+    → four rendered alternatives
+    → exposure-aware choice
+    → branch-local preference update
+    → exact history and replay
+```
 
-The repository contains a runnable CPU reference implementation and local open-weight model stacks for:
+It is technically stable and useful as a baseline. Round 1 testing showed that it should **not** yet be described as:
 
-- `procedural` — deterministic CPU renderer used by tests and UI development;
-- `flux2-klein` — FLUX.2 Klein 4B through `Flux2KleinPipeline`;
-- `krea2-turbo` — Krea 2 Turbo through `Krea2Pipeline`.
+- parent-conditioned image evolution;
+- learned visual-concept discovery;
+- perceptually diverse candidate generation;
+- or several independent algorithm/UI experiments.
 
-FLUX and Krea run locally through Diffusers. There is no hosted-model API adapter. The default real-model codec builds eight semantic directions directly in prompt-embedding space; a prompt-string fallback remains available for comparison.
+The current implementation searches eight hand-authored prompt-embedding directions. Selecting a candidate promotes that rendered point and action; it does not pass the selected image back into FLUX as a generative parent. The browser concept shelf stores accepted action movements rather than recurring visual patterns.
 
-## Research and design reviews
+Start with:
 
-A source-backed multi-document review corpus lives in [`reviews/`](reviews/README.md). It contains:
+- [`ROADMAP.md`](ROADMAP.md) — Round 2 sequence and promotion gates;
+- [`docs/README.md`](docs/README.md) — documentation status and authority;
+- [`reviews/11_ROUND_1_ROOT_CAUSE_REVIEW.md`](reviews/11_ROUND_1_ROOT_CAUSE_REVIEW.md) — Round 1 diagnosis;
+- [`experiments/round2/README.md`](experiments/round2/README.md) — planned treatments.
 
-- five formal research reviews covering generative recommenders, Design Adjectives, preference learning and preferential Bayesian optimization, generator control spaces, and interactive generative search systems;
-- dedicated claim-and-citation maps for Ryan Murdock's and Evan Shimizu's work;
-- a synthesis that states exactly what Art Optimizer adopts, modifies, and still needs to test;
-- a detailed design review of preview, commit, reroll, favorite, New world, history, exposure, streaming, candidate roles, and missing actions;
-- an experiment plan with interaction, codec, learner, planner, persistent-memory, and longitudinal studies;
-- a canonical citation ledger that distinguishes peer-reviewed papers, theses, preprints, essays, project pages, and source repositories.
+## Repository map
 
-Start with [the review index](reviews/README.md), then read [the research synthesis](reviews/06_ART_OPTIMIZER_RESEARCH_SYNTHESIS.md) and [the core mechanics review](reviews/07_CORE_MECHANICS_AND_USER_ACTIONS_DESIGN_REVIEW.md).
+```text
+art_optimizer/      executable application
+ tests/              unit, integration, and browser-contract tests
+ scripts/            operational and benchmark scripts
+ docs/               architecture and implementation contracts
+ reviews/            prior work, design reviews, postmortems, raw source notes
+ experiments/        executable hypotheses and result receipts
+ ROADMAP.md           current research/product sequence
+```
+
+See [`docs/REPOSITORY_STRUCTURE.md`](docs/REPOSITORY_STRUCTURE.md) for the staged organization plan.
+
+## What works today
+
+- local procedural reference renderer;
+- local FLUX.2 Klein and Krea 2 Turbo Diffusers stacks;
+- model/codec selection without hosted generation APIs;
+- BF16 inference and ordinary Hugging Face caching;
+- browser UI with streamed candidates;
+- exposure-aware multinomial choice updates;
+- favorites, New world, exact history restoration, and branching;
+- SQLite persistence and render manifests;
+- original and concept-layout UI routes retained as T0 presentation variants.
 
 ## Quick start: CPU reference renderer
 
@@ -43,26 +63,22 @@ Python 3.11 or newer is required.
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e '.[dev]'
 make dev
 ```
 
-Open `http://localhost:8000`.
+Open:
 
-Runtime state is written to `.art-optimizer/`. The procedural renderer remains the default because it is deterministic, fast, and exercises the full UI, optimizer, persistence, streaming, and taste-atlas loop without a GPU.
+```text
+http://localhost:8000
+```
 
 ## Local open-weight models
 
-Install the optional local-model stack:
+Install the optional model stack:
 
 ```bash
-pip install -e ".[dev,models]"
-```
-
-A Hugging Face token may be required to download a gated checkpoint:
-
-```bash
-export HF_TOKEN=...
+pip install -e '.[dev,models]'
 ```
 
 ### FLUX.2 Klein 4B
@@ -72,7 +88,7 @@ ART_OPTIMIZER_MODEL=flux2-klein \
 ART_OPTIMIZER_DEVICE=cuda \
 ART_OPTIMIZER_DTYPE=bfloat16 \
 ART_OPTIMIZER_IMAGE_SIZE=1024 \
-python -m art_optimizer.app --host 0.0.0.0 --port 8000
+python -m art_optimizer.app --host 127.0.0.1 --port 8000
 ```
 
 ### Krea 2 Turbo
@@ -82,153 +98,76 @@ ART_OPTIMIZER_MODEL=krea2-turbo \
 ART_OPTIMIZER_DEVICE=cuda \
 ART_OPTIMIZER_DTYPE=bfloat16 \
 ART_OPTIMIZER_IMAGE_SIZE=1024 \
-python -m art_optimizer.app --host 0.0.0.0 --port 8000
-```
-
-For constrained VRAM:
-
-```bash
-export ART_OPTIMIZER_CPU_OFFLOAD=1
-```
-
-To require pre-downloaded files and prevent network model downloads:
-
-```bash
-export ART_OPTIMIZER_LOCAL_FILES_ONLY=1
-```
-
-To pin a specific Hugging Face model revision for reproducible research:
-
-```bash
-export ART_OPTIMIZER_MODEL_REVISION=<commit-or-tag>
-```
-
-To compare against ordinary prompt compilation instead of embedding directions:
-
-```bash
-export ART_OPTIMIZER_CONDITIONING_MODE=prompt
-```
-
-The model registry is available at `GET /api/models`, and the active model, codec, conditioning mode, replay level, and license identifier are reported by `GET /healthz`.
-
-### License note
-
-Both targets expose local weights and internals. FLUX.2 Klein 4B uses Apache-2.0. Krea 2 uses the **Krea 2 Community License**, not an OSI-approved open-source license. Its community terms include a company-wide revenue threshold for commercial use and require content filtering for deployments. Read the model metadata returned by `/api/models` and the upstream license before deployment.
-
-## Embedding codec
-
-The optimizer works in one canonical action space:
-
-\[
-a \in [-1,1]^8.
-\]
-
-The shared axes are:
-
-1. close-up ↔ expansive composition;
-2. organic ↔ geometric form;
-3. cool/restrained ↔ warm/saturated palette;
-4. soft/diffuse ↔ dramatic/directional lighting;
-5. minimal ↔ intricate detail;
-6. matte/painterly ↔ glossy/translucent material;
-7. still/orderly ↔ dynamic/turbulent motion;
-8. abstract/stylized ↔ materially realistic rendering.
-
-For each world prompt, the codec encodes a base prompt and positive/negative endpoint prompts for each axis. It forms local text-embedding directions:
-
-\[
-d_i = \frac{1}{2}\left(E(p_i^+) - E(p_i^-)\right),
-\]
-
-RMS-normalizes those directions, and applies the selected quantities:
-
-\[
-E(a) = E(p_0) + \frac{\eta}{\sqrt d}\sum_i a_i d_i.
-\]
-
-FLUX and Krea have small model-specific conditioning adapters because their embedding tensors and masks differ. Everything else—the action type, codec plan, renderer request, persistence, planner, and UI contract—is shared.
-
-This is a versioned experimental control basis. It still needs coordinate-sweep and human-evaluation receipts before being described as a validated semantic space.
-
-## Running on a remote node
-
-Yes. The server and browser use ordinary HTTP plus Server-Sent Events, and generated images are served by the same process.
-
-The safest development setup is an SSH tunnel:
-
-```bash
-# On the GPU node
 python -m art_optimizer.app --host 127.0.0.1 --port 8000
-
-# On your laptop
-ssh -L 8000:127.0.0.1:8000 user@your-node
 ```
 
-Then open `http://localhost:8000` on your laptop.
+Hugging Face downloads missing files into its normal cache and reuses them on later runs. The application data directory stores session state, generated artifacts, and manifests—not duplicate model weights.
 
-For direct LAN/VPC access, bind to `0.0.0.0`, allow the port in the node firewall/security group, and browse to `http://NODE_IP:8000`.
+Useful options:
 
-The development server currently has no built-in authentication or TLS. Do not expose it directly to the public Internet. Use an SSH tunnel, VPN, or authenticated HTTPS reverse proxy.
+```bash
+export HF_TOKEN=...                         # only if the model requires access
+export HF_HOME=/path/with/more/disk        # optional cache location
+export ART_OPTIMIZER_LOCAL_FILES_ONLY=1    # require cached/local files
+export ART_OPTIMIZER_MODEL_REVISION=...    # pin a checkpoint revision
+export ART_OPTIMIZER_CPU_OFFLOAD=1          # reduce VRAM at a latency cost
+export ART_OPTIMIZER_CONDITIONING_MODE=prompt  # prompt-string baseline
+```
 
-## Modularity
+## UI routes
 
-The implementation has narrow boundaries rather than model-specific branches throughout the service:
+The original UI remains available alongside the Round 1 concept-layout variants:
 
 ```text
-canonical action
-    -> SemanticDirectionCodec
-    -> model-specific embedding adapter
-    -> ImageRenderer
-    -> RenderedArtifact
+/ui/current-image
+/ui/implicit-lanes
+/ui/concept-shelf
+/ui/lane-board
 ```
 
-- **Models/codecs:** selected from one data registry. Adding a model means one profile and, only when tensor signatures differ, one small conditioning adapter.
-- **Renderer:** the service depends on the `ImageRenderer` protocol.
-- **Preference learner:** isolated in `preference.py`.
-- **Acquisition policy:** isolated in `planner.py`.
-- **Persistent memory:** isolated in `atlas.py`.
-- **UI:** consumes versioned HTTP/SSE projections and can be replaced without importing optimizer or model code. Set `ART_OPTIMIZER_STATIC_DIR` to serve another client build.
+These currently share the same backend policy and should be treated as **presentation variants**, not independent optimization treatments. Round 2 will define complete policy bundles before calling interfaces separate experiments.
 
-The current server selects one render stack at process startup so only one large checkpoint occupies GPU memory. Algorithm and UI A/B harnesses can share the same persisted event facts; runtime hot-swapping of multiple giant checkpoints in one process is intentionally not part of v0.
-
-## Optimizer
-
-The current design is the anchor. A quadratic feature map is used:
-
-\[
-\psi(a)=
-[a_1,\ldots,a_d,\;a_1^2,\ldots,a_d^2,\;\{a_i a_j\}_{i<j}].
-\]
-
-The branch-local utility model is:
-
-\[
-f(a)=w^\top\psi(a),
-\qquad q(w)=\mathcal N(\hat w,\Sigma_w).
-\]
-
-Selecting one candidate is modeled as one multinomial choice among the anchor and meaningfully exposed candidates. Reroll selects the anchor as the outside option. A finite proposal pool combines local Gaussian points, scrambled Sobol coverage, posterior sampling, uncertainty, diversity, and compatible taste-atlas guidance.
-
-The displayed quartet has four roles:
-
-1. best local continuation;
-2. diverse posterior sample;
-3. informative uncertainty probe;
-4. controlled surprise or another persistent taste mode.
-
-## Persistence and replay
-
-SQLite stores session projections, branch checkpoints, raw interaction events, command results, learner snapshots, and the preference atlas. PNGs are accompanied by request manifests. Cached images are reused only when model, source, codec, control basis, prompt, seed, action, dimensions, and inference settings match.
-
-Real-model data is namespaced by model ID by default, preventing a missing FLUX artifact from being silently regenerated by Krea after a server restart.
-
-## Test
+Choose the root route at startup:
 
 ```bash
-python -m compileall -q art_optimizer tests
-node --check art_optimizer/static/app.js
-ruff check art_optimizer tests
+ART_OPTIMIZER_UI=current-image python -m art_optimizer.app
+```
+
+## Remote access
+
+Bind the server to loopback and use an SSH tunnel:
+
+```bash
+# GPU node
+python -m art_optimizer.app --host 127.0.0.1 --port 8000
+
+# laptop
+ssh -L 8000:127.0.0.1:8000 user@node
+```
+
+Then open `http://localhost:8000`.
+
+The development server does not provide authentication or TLS. Do not expose it directly to the public Internet; use an SSH tunnel, VPN, or authenticated HTTPS reverse proxy.
+
+## Research direction
+
+Round 2 separates four lines of work:
+
+1. **Truthful controlled search** — split neutral novelty from negative preference and measure diversity on outputs.
+2. **Random soft-direction search** — explore calibrated conditioning directions that may be difficult to express as strings.
+3. **True image evolution** — add parent-conditioned rendering and preservation constraints.
+4. **Provisional visual concepts** — require recurring visual evidence before a learned object becomes composable.
+
+The current baseline remains runnable throughout so each intervention has an honest comparison.
+
+## Tests
+
+```bash
+python -m compileall -q art_optimizer tests scripts
+python -m ruff check .
 python -m pytest
+node --check art_optimizer/static/app.js
+node --test tests/js/test_concept_library.mjs
 ```
 
 With a server running:
@@ -237,13 +176,12 @@ With a server running:
 python scripts/smoke_test.py http://localhost:8000
 ```
 
-The normal test suite does not load model weights. Model codecs and embedding conditioning are tested with injected local fake pipelines.
-
 ## API
 
 ```text
 GET  /healthz
 GET  /api/models
+GET  /api/ui-experiments
 POST /api/sessions
 GET  /api/sessions/{session_id}
 GET  /api/sessions/{session_id}/events
@@ -255,6 +193,6 @@ POST /api/sessions/{session_id}/designs/{design_id}/favorite
 POST /api/sessions/{session_id}/history/{branch_node_id}/restore
 ```
 
-## License
+## Licenses
 
-The Art Optimizer code is licensed under the [MIT License](LICENSE). Model checkpoints, datasets, uploaded references, and generated-media obligations retain their own licenses.
+Art Optimizer code is licensed under the [MIT License](LICENSE). Model checkpoints, datasets, references, and generated-media obligations retain their own licenses. FLUX.2 Klein 4B is Apache-2.0. Krea 2 uses the Krea 2 Community License rather than an OSI-approved open-source license; review its commercial and deployment terms before use.

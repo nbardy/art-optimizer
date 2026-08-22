@@ -1,113 +1,97 @@
 # Art Optimizer Review Corpus
 
 **Status:** internal research and design review  
-**Review date:** 2026-08-22  
-**Scope:** persistent generative preference, interactive subjective optimization, image-model control spaces, and the product semantics of Art Optimizer
+**Review date:** 2026-08-22
 
-This directory separates formal research reviews from product synthesis and design decisions. The goal is not to decorate the project with citations after the fact. The goal is to make clear:
+This directory separates prior work, project interpretation, postmortems, and raw source evidence. It exists to prevent experimental proxies from being promoted into product claims without support.
 
-1. what prior work actually established;
-2. which parts Art Optimizer directly adopts;
-3. which parts are extensions or hypotheses;
-4. what the current product must test before making stronger claims.
+## Source policy
 
-## Five research reviews
+Prefer, in order:
 
-1. [Ryan Murdock: Generative Recommenders and Preference Priors](01_RYAN_MURDOCK_GENERATIVE_RECOMMENDERS.md)  
-   Reviews the Zahir/generative-recommender essay, the CLIP-aligned collaborative-filtering prototype, and the later sequence-conditioned preference-prior project.
+1. peer-reviewed papers and proceedings;
+2. author theses and official project pages;
+3. official source repositories;
+4. preprints when no archival version exists;
+5. author essays for work published primarily as essays.
 
-2. [Evan Shimizu: Design Adjectives](02_EVAN_SHIMIZU_DESIGN_ADJECTIVES.md)  
-   Reviews the UIST 2020 paper, the CMU thesis, the source repository, Gaussian-process subjective-function modeling, guided sampling modes, gallery interaction, and hover visualization.
+Source type matters. Ryan Murdock's work is cited as an author essay and released prototypes, not a controlled production evaluation. Evan Shimizu's *Design Adjectives* is peer-reviewed work backed by a thesis, source code, user studies, and professional case studies.
 
-3. [Preference Learning and Preferential Bayesian Optimization](03_PREFERENCE_LEARNING_AND_PREFERENTIAL_BO.md)  
-   Reviews Gaussian-process preference learning, active discrete-choice learning, preferential Bayesian optimization, multi-choice likelihoods, uncertainty, and nonstationary preferences.
+## Foundational research reviews
 
-4. [Generative Control Spaces and Learned Directions](04_GENERATIVE_CONTROL_SPACES_AND_DIRECTIONS.md)  
-   Reviews latent and activation directions, text-guided directions, attention/reference conditioning, adapter mixtures, initial-noise controls, and the requirements for a valid model codec.
+1. [Ryan Murdock: Generative Recommenders and Preference Priors](01_RYAN_MURDOCK_GENERATIVE_RECOMMENDERS.md)
+2. [Evan Shimizu: Design Adjectives](02_EVAN_SHIMIZU_DESIGN_ADJECTIVES.md)
+3. [Preference Learning and Preferential Bayesian Optimization](03_PREFERENCE_LEARNING_AND_PREFERENTIAL_BO.md)
+4. [Generative Control Spaces and Learned Directions](04_GENERATIVE_CONTROL_SPACES_AND_DIRECTIONS.md)
+5. [Interactive Generative Search Systems](05_INTERACTIVE_GENERATIVE_SEARCH_SYSTEMS.md)
 
-5. [Interactive Generative Search Systems](05_INTERACTIVE_GENERATIVE_SEARCH_SYSTEMS.md)  
-   Compares Design Adjectives, interactive evolutionary computation, active preference tools, Sequential Gallery, SwipeGANSpace, FABRIC, GimmBO, and MultiBO as interactive systems rather than isolated algorithms.
-
-## Companion reviews and design explorations
+Claim-level companions:
 
 - [Murdock claim and citation map](01A_RYAN_MURDOCK_CLAIM_AND_CITATION_MAP.md)
 - [Shimizu claim and citation map](02A_EVAN_SHIMIZU_CLAIM_AND_CITATION_MAP.md)
+- [Canonical citation ledger](CITATION_LEDGER.md)
+
+## Product synthesis and design
+
 - [Research synthesis for Art Optimizer](06_ART_OPTIMIZER_RESEARCH_SYNTHESIS.md)
 - [Core mechanics and user-actions design review](07_CORE_MECHANICS_AND_USER_ACTIONS_DESIGN_REVIEW.md)
 - [Experiment and evaluation plan](08_EXPERIMENT_AND_EVALUATION_PLAN.md)
 - [From image anchors to composable concept lanes](09_ATTRIBUTE_LIBRARY_AND_ANCHORING_EXPLORATION.md)
-- [Concept-lanes executable UI experiment specification](10_CONCEPT_LANES_UI_EXPERIMENTS.md)
+- [Concept-lanes UI experiment specification](10_CONCEPT_LANES_UI_EXPERIMENTS.md)
+
+## Round 1 evidence and postmortem
+
 - [Round 1 root-cause review](11_ROUND_1_ROOT_CAUSE_REVIEW.md)
-- [Round 1 observation-to-code matrix](11A_ROUND_1_OBSERVATION_TO_CODE_MATRIX.md)
+- [Observation-to-code matrix](11A_ROUND_1_OBSERVATION_TO_CODE_MATRIX.md)
 - [Five mathematical partial solutions](12_FIVE_MATHEMATICAL_PARTIAL_SOLUTIONS.md)
 - [Ten ideals and divergent product designs](13_TEN_IDEALS_AND_DIVERGENT_PRODUCT_DESIGNS.md)
-- [Round 1 source feedback note](source_notes/ROUND_1_FEEDBACK_NOTE_2026-08-22.md)
-- [Canonical citation ledger](CITATION_LEDGER.md)
 
-## Round 1 finding
+Raw source notes:
 
-The first real FLUX.2 Klein session showed that the implementation is a stable controlled-search baseline, but the visible product language implies stronger capabilities than the renderer and concept model provide.
+- [User Round 1 feedback](source_notes/ROUND_1_FEEDBACK_NOTE_2026-08-22.md)
+- [External Round 1 technical review](source_notes/ROUND_1_EXTERNAL_TECHNICAL_REVIEW_2026-08-22.md)
 
-The central mismatch is:
+The source notes are preserved separately from project conclusions. Simulation numbers in the external review remain provisional until reproduction code, configuration, and receipts are checked in.
+
+## Round 1 conclusion
+
+The first FLUX.2 Klein session showed that the engineering scaffold is useful, but the representation and product language were misaligned.
 
 ```text
 implemented
-    preference search over eight hand-authored prompt-embedding coordinates
+    controlled preference search over eight hand-authored prompt-embedding coordinates
 
 implied
-    parent-conditioned image evolution plus reusable visual-concept learning
+    parent-conditioned image evolution and reusable visual-concept learning
 ```
 
-The [Round 1 root-cause review](11_ROUND_1_ROOT_CAUSE_REVIEW.md) separates this into command semantics, stochastic policy, perceptual slate diversity, renderer ancestry, concept evidence, and experiment-policy boundaries. The tracking umbrella is [issue #10](https://github.com/nbardy/art-optimizer/issues/10).
-
-## Source policy
-
-The reviews prefer, in this order:
-
-1. peer-reviewed papers and official proceedings;
-2. an author's thesis or project page;
-3. official source repositories;
-4. arXiv manuscripts when no archival version exists;
-5. author essays for ideas that were published as essays rather than papers.
-
-The source type matters. Ryan Murdock's *Generative Recommenders* is an unusually relevant research essay and prototype, but it is not presented here as a peer-reviewed evaluation. Evan Shimizu's *Design Adjectives* is a peer-reviewed UIST paper backed by a doctoral thesis, released code, user studies, and professional case studies. Recent systems such as MultiBO and GimmBO are cited as preprints unless and until an archival publication is identified.
-
-## Claim labels
-
-The documents use the following labels where useful:
-
-- **Established by source:** directly supported by a cited paper, thesis, or released implementation.
-- **Interpretation:** our reading of the source and its implications.
-- **Art Optimizer decision:** a deliberate product or architecture choice.
-- **Hypothesis:** an empirical claim that still needs testing.
-- **Non-claim:** language the project should explicitly avoid.
-
-## High-level conclusion
-
-The reviewed literature supports a strong decomposition:
-
-```text
-persistent preference representation
-        +
-fast branch-local preference learning
-        +
-uncertainty-aware candidate selection
-        +
-a compact, versioned generator control space
-        +
-an interaction model that preserves agency and recoverability
-```
-
-The Round 1 postmortem adds several distinctions that must not be collapsed again:
+The postmortem separates objects that must not be collapsed again:
 
 ```text
 comparison anchor
     != proposal center
     != generative parent
     != stochastic root
+    != preference posterior
+    != provisional move
     != visual concept
     != persistent taste mode
-    != UI experiment policy
+    != experiment policy
 ```
 
-No single reviewed system supplies that entire stack. Art Optimizer's contribution is therefore best described as a specific integration and experimental platform, not as proof that every component is already optimal.
+The current implementation remains a valid controlled-search baseline. It is not evidence that the eight axes are perceptually well conditioned, that selected images parent descendants, or that singleton action deltas are visual concepts.
+
+## Claim labels
+
+Use these labels where useful:
+
+- **Established by source:** directly supported by cited work or released implementation.
+- **Observed:** directly seen in a recorded session or code path.
+- **Interpretation:** our inference from evidence.
+- **Project decision:** deliberate product/architecture choice.
+- **Hypothesis:** requires an experiment.
+- **Non-claim:** language the project should avoid.
+
+## Next step
+
+Research proposals move into [`../experiments/`](../experiments/README.md) only when they have a baseline, treatment, instrumentation plan, failure criteria, and promotion gate. The current Round 2 queue is [`../experiments/round2/README.md`](../experiments/round2/README.md).
