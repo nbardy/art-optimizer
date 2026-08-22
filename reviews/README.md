@@ -45,6 +45,9 @@ Claim-level companions:
 - [Observation-to-code matrix](11A_ROUND_1_OBSERVATION_TO_CODE_MATRIX.md)
 - [Five mathematical partial solutions](12_FIVE_MATHEMATICAL_PARTIAL_SOLUTIONS.md)
 - [Ten ideals and divergent product designs](13_TEN_IDEALS_AND_DIVERGENT_PRODUCT_DESIGNS.md)
+- [One authoritative taste state](14_ONE_AUTHORITATIVE_TASTE_STATE_REVIEW.md)
+- [Unified Taste Engine implementation plan](14A_UNIFIED_TASTE_ENGINE_IMPLEMENTATION_PLAN.md)
+- [Taste engine, data model, and UI ablation matrix](14B_TASTE_ENGINE_UI_ABLATION_MATRIX.md)
 
 Raw source notes:
 
@@ -63,6 +66,42 @@ implemented
 
 implied
     parent-conditioned image evolution and reusable visual-concept learning
+```
+
+The [Round 1 root-cause review](11_ROUND_1_ROOT_CAUSE_REVIEW.md) separates this into command semantics, stochastic policy, perceptual slate diversity, renderer ancestry, concept evidence, and experiment-policy boundaries. The tracking umbrella is [issue #10](https://github.com/nbardy/art-optimizer/issues/10).
+
+## Current architecture decision
+
+Round 1 also revealed three incompatible preference learners: the branch-local 44-parameter utility posterior, the server-side taste atlas, and the browser-local Concept Library. The [one-authoritative-state review](14_ONE_AUTHORITATIVE_TASTE_STATE_REVIEW.md) supersedes the earlier recommendation to keep independent persistent and branch-local preference models.
+
+The new decision is:
+
+```text
+one immutable typed preference history
+        ↓
+one versioned server-side TasteState reducer with homogeneous scoped families
+        ↓
+planner + New World + every UI consume the same belief
+```
+
+The family may contain several taste modes and immutable branch revisions. That is still one learning system. Evidence storage, candidate policy, rendering, and UI remain separate non-preference primitives.
+
+This is a per-treatment ownership rule, not a ban on competing algorithms. The [ablation matrix](14B_TASTE_ENGINE_UI_ABLATION_MATRIX.md) defines multiple versioned engines, projection/data models, planners, and UIs. One assigned engine owns each live session; other compatible engines may replay the same immutable facts in read-only shadow namespaces.
+
+## High-level conclusion
+
+The reviewed literature and Round 1 now support this decomposition:
+
+```text
+immutable preference events
+        +
+one versioned family of small taste posteriors
+        +
+an uncertainty-aware candidate policy
+        +
+a separately validated, versioned generator control space
+        +
+truthful commands and recoverable history
 ```
 
 The postmortem separates objects that must not be collapsed again:

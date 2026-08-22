@@ -148,13 +148,9 @@ This is a direct precedent for Art Optimizer's proposed command:
 
 Generate examples regularly spaced along the learned adjective scale. This provides a visual sweep of how the learned concept manifests across the design domain.
 
-This maps naturally to learned-direction inspection:
+The word “Axis” refers to the scalar learned adjective score. It does not mean that the sampler follows one linear parameter-space direction \(x_0+td\). The released sampler seeks designs at separated predicted-score levels while mutating subsets of parameters.
 
-```text
--2d   -d   current   +d   +2d
-```
-
-An axis view is not only a control. It is also a diagnostic for whether a direction is monotonic, coherent, and disentangled.
+A linear `-2d, -d, current, +d, +2d` sweep may still be useful for Art Optimizer, but it is our control-basis diagnostic, not an operation established by Shimizu.
 
 ## 5. Interface contribution
 
@@ -248,7 +244,7 @@ Art Optimizer's main interface observes one choice among the anchor and exposed 
 y_t\in\{0,1,\ldots,m\},
 \]
 
-where \(y_t=0\) means reroll/anchor preference and \(y_t=j\) means candidate \(j\) was committed.
+where \(y_t=0\) means an explicit `NoneOfThese`/anchor preference and \(y_t=j\) means candidate \(j\) was committed. A neutral `MoreVariety` request is not a choice observation.
 
 This reduces calibration burden. Users usually find “which is better?” easier and more consistent than assigning a stable score such as 0.73.
 
@@ -267,9 +263,9 @@ That requires posterior uncertainty and slate diversity, not only score-threshol
 
 Design Adjectives assumes a declared bounded parameterization. Diffusion systems do not naturally provide one clean semantic space. Art Optimizer therefore treats the codec/control basis as an experimental object that must be versioned and validated.
 
-#### One adjective becomes persistent plus local structure
+#### One adjective originally became persistent plus local structure
 
-A design adjective is local to a learned concept. Art Optimizer adds a persistent multimodal taste atlas across sessions and a fast branch-local posterior for the current project.
+The original Art Optimizer synthesis added a persistent multimodal taste atlas across sessions and a fast branch-local posterior for the current project. Round 1 showed that this becomes incoherent when those layers maintain unrelated preference representations. The current architecture decision is instead one versioned family of taste components with branch-local activation and immutable history; see [One Authoritative Taste State](14_ONE_AUTHORITATIVE_TASTE_STATE_REVIEW.md).
 
 ## 8. Important limitations
 
@@ -318,9 +314,9 @@ The system can implement analogues of Towards, Similar Score, Away, and Axis int
 | Towards | best local continuation |
 | Similar Score | diverse posterior candidate with comparable predicted utility |
 | Away | controlled surprise / basin escape |
-| Axis | explicit direction-sweep diagnostic |
+| Axis | gallery spread across separated scalar adjective-score levels; using utility levels is Art Optimizer's adaptation |
 
-This keeps the initial UI lean while preserving the richer design logic.
+An explicit linear direction sweep is a separate Art Optimizer control-basis experiment. This keeps the source attribution precise while preserving the richer design logic.
 
 ### 9.4 Build refinement only after exploration works
 
@@ -340,7 +336,7 @@ Learned sliders, direction chips, locks, and axis sweeps are valuable, but they 
 
 The strongest citation-safe statement is:
 
-> Shimizu et al.'s Design Adjectives framework shows that a Gaussian-process model of user-scored examples can guide interactive gallery exploration in high-dimensional parameterized design spaces, with sampling modes for moving toward, away from, across, or along a learned subjective concept. Art Optimizer adapts this local design-search pattern to multi-choice feedback over image-generator controls, adds uncertainty-aware acquisition, and separates local intent from persistent taste memory.
+> Shimizu et al.'s Design Adjectives framework shows that a Gaussian-process model of user-scored examples can guide interactive gallery exploration in high-dimensional parameterized design spaces, with sampling modes for seeking higher scores, lower scores, similar scores, or separated levels of the learned scalar adjective score. Art Optimizer adapts this local design-search pattern to multi-choice feedback over image-generator controls, adds uncertainty-aware acquisition, and proposes branch-local activation within one persistent versioned taste state.
 
 Art Optimizer should not imply that Design Adjectives validates diffusion latent directions, four-candidate slates, persistent user priors, or the current multinomial learner.
 

@@ -9,7 +9,7 @@ This document separates evidence from the UIST paper and thesis, design ideas di
 | `SHIMIZU-UIST` | [Design Adjectives](https://doi.org/10.1145/3379337.3415866) | peer-reviewed UIST paper | framework, implementation, study and case-study claims |
 | `SHIMIZU-THESIS` | [CMU-CS-20-104](https://csd.cs.cmu.edu/sites/default/files/phd-thesis/CMU-CS-20-104.pdf) | doctoral thesis | equations, sampling modes, UI details, limitations, future work |
 | `SHIMIZU-PROJECT` | [official project page](https://graphics.cs.cmu.edu/projects/design-adjectives/) | author project page | abstract, media, code, citation |
-| `SHIMIZU-CODE` | [`ebshimizu/DesignAdjectives`](https://github.com/ebshimizu/DesignAdjectives) | source code | system architecture and released implementation |
+| `SHIMIZU-CODE` | [`ebshimizu/DesignAdjectives` at audited revision `cacfbbae`](https://github.com/ebshimizu/DesignAdjectives/tree/cacfbbaebe13b21c44e55738c2260a0e3312022c) | source code | system architecture and released implementation |
 
 ## Claim table
 
@@ -19,6 +19,7 @@ This document separates evidence from the UIST paper and thesis, design ideas di
 | The implementation uses GPR | `SHIMIZU-UIST`, `SHIMIZU-THESIS` §4.1 | “The domain-agnostic implementation fits Gaussian process regression to user scores.” | “All Design Adjectives implementations must use a GP.” |
 | The examples are scored from 0 to 1 | `SHIMIZU-THESIS` §4.1 | “The evaluated implementation accepts scalar scores in [0,1].” | Attribute Art Optimizer's multi-choice likelihood to Shimizu. |
 | Four sampling modes are provided | `SHIMIZU-THESIS` §4.2.1 | “Towards, Away, Similar Score, and Axis alter the sampler's acceptance criteria.” | “The four modes are a Bayesian acquisition function.” |
+| Axis spans the learned score | `SHIMIZU-THESIS`, `SHIMIZU-CODE` | “Axis seeks examples at separated levels of the scalar adjective score.” | “Axis follows one learned linear direction through parameter space.” |
 | Hover previews suggestions in the main view | `SHIMIZU-THESIS` Fig. 4.5 | “The evaluated interface lets users hover gallery thumbnails to render them in the main view.” | “Hover was treated as preference evidence.” |
 | Press-and-hold preview appears in mobile discussion | `SHIMIZU-THESIS` Fig. 7.3 | “The thesis proposes press-and-hold full-size preview as a mobile adaptation.” | “A mobile press-and-hold interface was validated in the main user study.” |
 | The framework was demonstrated in three domains | `SHIMIZU-UIST`, `SHIMIZU-PROJECT` | “Materials, fonts, and particle systems were demonstrated.” | “The framework was validated on diffusion-generated art.” |
@@ -61,7 +62,7 @@ Use the thesis for details not compactly stated in the UIST paper, including:
 
 ### Local optimization ancestry
 
-> Art Optimizer's branch-local interaction is directly informed by Shimizu et al.'s Design Adjectives framework, which learns a subjective function from user-scored examples and uses it to guide gallery sampling in high-dimensional parameterized spaces. The framework's Towards, Away, Similar Score, and Axis modes distinguish improvement, basin escape, iso-preference exploration, and concept sweeps—roles that Art Optimizer translates into a four-candidate acquisition policy and later direction diagnostics.
+> Art Optimizer's branch-local interaction is directly informed by Shimizu et al.'s Design Adjectives framework, which learns a subjective function from user-scored examples and uses it to guide gallery sampling in high-dimensional parameterized spaces. The framework's Towards, Away, Similar Score, and Axis modes distinguish improvement, basin escape, iso-preference exploration, and coverage across scalar-score levels—roles that Art Optimizer adapts into candidate-policy experiments. Linear direction diagnostics are a separate Art Optimizer proposal.
 
 ### Interface ancestry
 
@@ -69,7 +70,7 @@ Use the thesis for details not compactly stated in the UIST paper, including:
 
 ### Extension paragraph
 
-> Art Optimizer differs from the evaluated Design Adjectives implementation by observing multi-choice decisions rather than absolute 0–1 scores, using posterior uncertainty during candidate selection, operating over a versioned image-generator control basis, and maintaining persistent multimodal preference memory across worlds and sessions.
+> Art Optimizer differs from the evaluated Design Adjectives implementation by observing multi-choice decisions rather than absolute 0–1 scores, using posterior uncertainty during candidate selection, operating over a versioned image-generator control basis, and proposing a replayable family of explicit taste modes across worlds and sessions.
 
 ## Art Optimizer attribution boundary
 
@@ -82,7 +83,7 @@ Use the thesis for details not compactly stated in the UIST paper, including:
 | Four corner candidates | Art Optimizer product choice |
 | Anchor-as-outside-option likelihood | Art Optimizer synthesis with discrete-choice literature |
 | Uncertainty-aware four-role planner | Art Optimizer synthesis with PBO/active learning |
-| Persistent taste atlas | Art Optimizer extension informed by generative-recommender work |
+| Replayable family of taste components | Art Optimizer extension informed by preference-learning and generative-recommender work |
 | Diffusion/flow model codec | Art Optimizer architecture plus generative-control literature |
 
 ## Non-claims

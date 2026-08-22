@@ -116,7 +116,9 @@ This ledger is the source-of-truth bibliography for the review corpus. It record
 
 > Evan Shimizu. `DesignAdjectives`. GitHub repository. https://github.com/ebshimizu/DesignAdjectives
 
-**Use for:** released system architecture and implementation dependencies.
+**Audited revision:** [`cacfbbaebe13b21c44e55738c2260a0e3312022c`](https://github.com/ebshimizu/DesignAdjectives/tree/cacfbbaebe13b21c44e55738c2260a0e3312022c)
+
+**Use for:** released system architecture, GP implementation, guided rejection sampler, parameter mixer, and implementation dependencies.
 
 ## `SHIMIZU-PROJECT`
 
@@ -182,6 +184,15 @@ This ledger is the source-of-truth bibliography for the review corpus. It record
 > Siu Lun Chau, Javier Gonzalez, and Dino Sejdinovic. “Learning Inconsistent Preferences with Gaussian Processes.” In *Proceedings of the 25th International Conference on Artificial Intelligence and Statistics*, PMLR 151, 2022. https://proceedings.mlr.press/v151/lun-chau22a.html
 
 **Use for:** nontransitive/inconsistent preference modeling.
+
+## `SUTTON-BARTO-2018`
+
+**Type:** Textbook
+**Canonical citation:**
+
+> Richard S. Sutton and Andrew G. Barto. *Reinforcement Learning: An Introduction*. 2nd ed. MIT Press, 2018. http://incompleteideas.net/book/the-book-2nd.html
+
+**Use for:** the policy, state, reward, return, and long-horizon control semantics that distinguish reinforcement learning from immediate preference inference and active query selection.
 
 # D. Interactive evolutionary and generative search
 
