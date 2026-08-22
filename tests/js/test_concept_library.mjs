@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { ConceptLibrary } from "../../art_optimizer/static/experiment_core.js";
+import {
+  ConceptLibrary,
+  currentExposure,
+  formatRequestError,
+} from "../../art_optimizer/static/experiment_core.js";
 
 class MemoryStorage {
   constructor() {
@@ -60,4 +64,32 @@ assert.ok(library.view(base)[0].opposition > 0);
 
 const other = snapshot("basis-b");
 assert.equal(library.view(other).length, 0, "control bases must never share numeric lanes");
+
+const exposure = currentExposure(
+  {
+    active_round: {
+      candidates: [
+        { candidate_id: "current-ready", status: "ready" },
+        { candidate_id: "current-rendering", status: "rendering" },
+      ],
+    },
+  },
+  new Set(["stale-one", "stale-two", "stale-three", "stale-four", "current-ready"]),
+);
+assert.deepEqual(exposure.ids, ["current-ready"]);
+assert.equal(exposure.candidates.length, 1);
+
+assert.equal(
+  formatRequestError(
+    [
+      {
+        loc: ["body", "exposed_candidate_ids"],
+        msg: "List should have at most 4 items after validation, not 5",
+      },
+    ],
+    422,
+  ),
+  "exposed_candidate_ids: List should have at most 4 items after validation, not 5",
+);
+
 console.log("concept library checks passed");
