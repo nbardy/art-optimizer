@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .composition import ConfiguredArtOptimizerService
+from .composition import build_service
 from .config import Settings
 from .domain import (
     CommitPayload,
@@ -33,7 +33,7 @@ from .ui_experiments import (
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.ensure_directories()
-    service = ConfiguredArtOptimizerService(settings)
+    service = build_service(settings)
     default_static_dir = Path(__file__).with_name("static").resolve()
     static_dir = Path(
         os.environ.get("ART_OPTIMIZER_STATIC_DIR", str(default_static_dir))
