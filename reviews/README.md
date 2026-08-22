@@ -37,7 +37,28 @@ This directory separates formal research reviews from product synthesis and desi
 - [Experiment and evaluation plan](08_EXPERIMENT_AND_EVALUATION_PLAN.md)
 - [From image anchors to composable concept lanes](09_ATTRIBUTE_LIBRARY_AND_ANCHORING_EXPLORATION.md)
 - [Concept-lanes executable UI experiment specification](10_CONCEPT_LANES_UI_EXPERIMENTS.md)
+- [Round 1 root-cause review](11_ROUND_1_ROOT_CAUSE_REVIEW.md)
+- [Round 1 observation-to-code matrix](11A_ROUND_1_OBSERVATION_TO_CODE_MATRIX.md)
+- [Five mathematical partial solutions](12_FIVE_MATHEMATICAL_PARTIAL_SOLUTIONS.md)
+- [Ten ideals and divergent product designs](13_TEN_IDEALS_AND_DIVERGENT_PRODUCT_DESIGNS.md)
+- [Round 1 source feedback note](source_notes/ROUND_1_FEEDBACK_NOTE_2026-08-22.md)
 - [Canonical citation ledger](CITATION_LEDGER.md)
+
+## Round 1 finding
+
+The first real FLUX.2 Klein session showed that the implementation is a stable controlled-search baseline, but the visible product language implies stronger capabilities than the renderer and concept model provide.
+
+The central mismatch is:
+
+```text
+implemented
+    preference search over eight hand-authored prompt-embedding coordinates
+
+implied
+    parent-conditioned image evolution plus reusable visual-concept learning
+```
+
+The [Round 1 root-cause review](11_ROUND_1_ROOT_CAUSE_REVIEW.md) separates this into command semantics, stochastic policy, perceptual slate diversity, renderer ancestry, concept evidence, and experiment-policy boundaries. The tracking umbrella is [issue #10](https://github.com/nbardy/art-optimizer/issues/10).
 
 ## Source policy
 
@@ -77,12 +98,16 @@ a compact, versioned generator control space
 an interaction model that preserves agency and recoverability
 ```
 
-The concept-lane exploration adds another distinction:
+The Round 1 postmortem adds several distinctions that must not be collapsed again:
 
 ```text
-current rendered realization
-        !=
-reusable composition of learned attributes
+comparison anchor
+    != proposal center
+    != generative parent
+    != stochastic root
+    != visual concept
+    != persistent taste mode
+    != UI experiment policy
 ```
 
 No single reviewed system supplies that entire stack. Art Optimizer's contribution is therefore best described as a specific integration and experimental platform, not as proof that every component is already optimal.
