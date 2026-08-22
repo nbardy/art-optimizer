@@ -53,6 +53,41 @@ function writeJSON(storage, key, value) {
   }
 }
 
+export function formatRequestError(detail, status) {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (!item || typeof item !== "object") return null;
+        const location = Array.isArray(item.loc)
+          ? item.loc.filter((part) => part !== "body").join(".")
+          : "";
+        const message = item.msg || item.message;
+        return message ? `${location ? `${location}: ` : ""}${message}` : null;
+      })
+      .filter(Boolean);
+    if (messages.length) return messages.join("; ");
+  }
+  if (detail && typeof detail === "object") {
+    if (typeof detail.message === "string") return detail.message;
+    if (typeof detail.msg === "string") return detail.msg;
+  }
+  return `Request failed (${status})`;
+}
+
+export function currentExposure(snapshot, exposedCandidateIds) {
+  const candidates = snapshot?.active_round?.candidates || [];
+  const exposedCandidates = candidates.filter(
+    (candidate) =>
+      candidate.status === "ready" && exposedCandidateIds.has(candidate.candidate_id),
+  );
+  return {
+    candidates: exposedCandidates,
+    ids: exposedCandidates.map((candidate) => candidate.candidate_id),
+  };
+}
+
 export class ConceptLibrary {
   constructor(storage = globalThis.localStorage) {
     this.storage = storage;
@@ -293,7 +328,7 @@ async function requestJSON(path, options = {}) {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(body.detail || `Request failed (${response.status})`);
+    const error = new Error(formatRequestError(body.detail, response.status));
     error.status = response.status;
     throw error;
   }
@@ -456,6 +491,7 @@ export function createStudioController({ storage = globalThis.localStorage } = {
     const before = state.snapshot;
     if (!chosen || chosen.status !== "ready" || state.busy) return null;
     markExposed(candidateId);
+    const exposed = currentExposure(before, state.exposedCandidateIds);
     setBusy(true);
     try {
       const snapshot = await requestJSON(
@@ -464,7 +500,7 @@ export function createStudioController({ storage = globalThis.localStorage } = {
           method: "POST",
           body: JSON.stringify(
             commandPayload({
-              exposed_candidate_ids: Array.from(state.exposedCandidateIds),
+              exposed_candidate_ids: exposed.ids,
             }),
           ),
         },
@@ -485,23 +521,20 @@ export function createStudioController({ storage = globalThis.localStorage } = {
   async function reroll() {
     const before = state.snapshot;
     if (!before?.active_round || state.busy) return null;
-    const exposedIds = Array.from(state.exposedCandidateIds);
-    const exposedCandidates = before.active_round.candidates.filter((item) =>
-      state.exposedCandidateIds.has(item.candidate_id),
-    );
+    const exposed = currentExposure(before, state.exposedCandidateIds);
     setBusy(true);
     try {
       const snapshot = await requestJSON(`/api/sessions/${state.sessionId}/reroll`, {
         method: "POST",
         body: JSON.stringify(
-          commandPayload({ exposed_candidate_ids: exposedIds }),
+          commandPayload({ exposed_candidate_ids: exposed.ids }),
         ),
       });
-      if (exposedCandidates.length >= 2) {
-        conceptLibrary.observeReroll(before, exposedCandidates);
+      if (exposed.candidates.length >= 2) {
+        conceptLibrary.observeReroll(before, exposed.candidates);
       }
       applySnapshot(snapshot);
-      return { snapshot, exposureCount: exposedCandidates.length };
+      return { snapshot, exposureCount: exposed.candidates.length };
     } catch (error) {
       await recoverConflict(error);
       state.error = error.message;
