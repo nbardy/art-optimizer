@@ -107,6 +107,9 @@ def test_emergent_taste_treatment_keeps_root_fixed_and_replays(tmp_path: Path) -
             if event["kind"] == "emergent_taste_choice_recorded"
         ]
         assert len(taste_events) == 1
+        assert taste_events[0]["payload"]["control_basis_revision"].startswith(
+            "fixed-root-scope/v1:"
+        )
         receipts = taste_events[0]["payload"]["prediction_receipts"]
         assert set(receipts) == {"k=1", "k=2", "k=3"}
         assert all(0.0 < probability <= 1.0 for probability in receipts.values())
