@@ -1,0 +1,348 @@
+.emergent-start {
+  background:
+    radial-gradient(circle at 12% 8%, rgba(124, 91, 53, 0.28), transparent 34%),
+    radial-gradient(circle at 88% 84%, rgba(54, 79, 105, 0.26), transparent 38%),
+    #080808;
+}
+
+.emergent-start-card {
+  width: min(720px, 100%);
+}
+
+.emergent-start-card h1 {
+  max-width: 640px;
+}
+
+.experiment-contract {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin-top: 26px;
+  padding: 17px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.experiment-contract span {
+  color: #aaa69d;
+  letter-spacing: 0.14em;
+  font-size: 10px;
+}
+
+.experiment-contract strong {
+  color: #dfdbd2;
+  font-weight: 500;
+}
+
+.emergent-studio {
+  grid-template-rows: 46px minmax(0, 1fr) 68px auto;
+}
+
+.treatment-badge,
+.fixed-root-indicator {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 12px;
+  color: #c9b28c;
+  font-size: 10px;
+  letter-spacing: 0.11em;
+}
+
+.fixed-root-indicator {
+  margin-left: 0;
+  color: #8eb78d;
+}
+
+.emergent-workspace {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 320px);
+  overflow: hidden;
+}
+
+.emergent-workspace .canvas-stage {
+  border-right: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.taste-rail {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 17px 24px;
+  background:
+    linear-gradient(180deg, rgba(23, 21, 18, 0.94), rgba(10, 10, 10, 0.98));
+}
+
+.taste-rail-header {
+  padding: 2px 2px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.taste-rail-header .eyebrow {
+  margin-bottom: 9px;
+}
+
+.taste-rail h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 26px;
+  line-height: 1.05;
+  font-weight: 400;
+}
+
+#taste-summary {
+  margin: 12px 0 0;
+  color: #aaa69f;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.taste-list {
+  display: grid;
+  gap: 11px;
+  padding: 16px 0;
+}
+
+.taste-card {
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.taste-card.latest {
+  border-color: rgba(214, 190, 145, 0.55);
+  background: rgba(179, 136, 74, 0.08);
+}
+
+.taste-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.taste-card-title {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.taste-status {
+  color: #a29e95;
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.taste-status.established {
+  color: #93b990;
+}
+
+.taste-metrics {
+  margin: 8px 0 11px;
+  color: #8f8b83;
+  font-size: 11px;
+}
+
+.taste-exemplars {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  min-height: 52px;
+}
+
+.taste-exemplar {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #111;
+}
+
+.taste-exemplar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.taste-empty-exemplar {
+  display: grid;
+  place-items: center;
+  color: #55524d;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.taste-resume {
+  width: 100%;
+  margin-top: 10px;
+  min-height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.035);
+  color: #c8c3b9;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.taste-resume:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.taste-resume:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.model-scoreboard {
+  padding: 13px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.model-scoreboard-title {
+  margin-bottom: 9px;
+  color: #8c8880;
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.model-row {
+  display: grid;
+  grid-template-columns: 58px 1fr max-content;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  color: #817e77;
+  font-size: 10px;
+}
+
+.model-row.selected {
+  color: #e1d9ca;
+}
+
+.model-track {
+  height: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.model-fill {
+  height: 100%;
+  background: currentColor;
+  opacity: 0.65;
+}
+
+.model-state {
+  min-width: 44px;
+  text-align: right;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.taste-footnote {
+  margin: 16px 0 0;
+  color: #66635d;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.emergent-command-bar {
+  min-height: 68px;
+}
+
+.emergent-command-bar .command-button {
+  min-width: 148px;
+  display: grid;
+  gap: 3px;
+  place-items: center;
+  padding: 8px 15px;
+}
+
+.emergent-command-bar .command-button small {
+  color: #7f7b73;
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.emergent-command-bar .primary-command {
+  border-color: rgba(225, 216, 197, 0.52);
+  background: rgba(225, 216, 197, 0.1);
+}
+
+.emergent-command-bar .primary-command small {
+  color: #aaa398;
+}
+
+.top-meta a,
+.renderer-note a {
+  color: #bab5ab;
+  text-decoration: none;
+}
+
+.top-meta a:hover,
+.renderer-note a:hover {
+  color: #fff;
+}
+
+@media (max-width: 880px) {
+  .emergent-studio {
+    height: auto;
+    min-height: 100vh;
+    grid-template-rows: 46px minmax(640px, 74vh) auto 68px auto;
+    overflow: visible;
+  }
+
+  .emergent-workspace {
+    display: contents;
+  }
+
+  .emergent-workspace .canvas-stage {
+    min-height: 640px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  }
+
+  .taste-rail {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .taste-list {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  }
+
+  .emergent-command-bar {
+    position: sticky;
+    bottom: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .treatment-badge,
+  #world-label,
+  .top-meta a {
+    display: none;
+  }
+
+  .emergent-studio {
+    grid-template-rows: 46px minmax(560px, 72vh) auto 76px auto;
+  }
+
+  .emergent-workspace .canvas-stage {
+    min-height: 560px;
+  }
+
+  .emergent-command-bar {
+    gap: 5px;
+    padding-inline: 7px;
+  }
+
+  .emergent-command-bar .command-button {
+    min-width: 0;
+    flex: 1;
+    padding-inline: 8px;
+  }
+}
