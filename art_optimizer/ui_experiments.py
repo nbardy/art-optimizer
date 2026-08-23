@@ -38,7 +38,9 @@ _EXPERIMENTS = {
     "concept-shelf": UIExperiment(
         experiment_id="concept-shelf",
         label="Concept shelf",
-        description="A visible shelf composes learned non-prompt directions with tri-state control.",
+        description=(
+            "A visible shelf composes learned non-prompt directions with tri-state control."
+        ),
         filename="shelf.html",
         concept_controls="visible",
     ),
@@ -51,6 +53,16 @@ _EXPERIMENTS = {
         ),
         filename="lanes.html",
         concept_controls="structural",
+    ),
+    "emergent-tastes": UIExperiment(
+        experiment_id="emergent-tastes",
+        label="Emergent tastes",
+        description=(
+            "A fixed-root embedding-search UI where latent taste modes emerge from "
+            "chronologically tested votes instead of manual shelves or labels."
+        ),
+        filename="emergent.html",
+        concept_controls="emergent",
     ),
 }
 
@@ -72,6 +84,10 @@ def selected_ui_id() -> str:
 
 
 def validate_ui_files(static_dir: Path) -> None:
-    missing = [item.filename for item in _EXPERIMENTS.values() if not (static_dir / item.filename).is_file()]
+    missing = [
+        item.filename
+        for item in _EXPERIMENTS.values()
+        if not (static_dir / item.filename).is_file()
+    ]
     if missing:
         raise ValueError(f"UI directory is missing bundled experiments: {', '.join(missing)}")
