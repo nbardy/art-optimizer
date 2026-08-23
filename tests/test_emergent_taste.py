@@ -97,6 +97,26 @@ def test_sticky_conflicting_blocks_promote_two_predictive_tastes() -> None:
     assert centers[:, 0].max() > 0.5
 
 
+def test_three_coherent_modes_earn_three_tastes() -> None:
+    engine = EmergentTasteEngine(
+        2,
+        max_components=3,
+        em_iterations=8,
+        structural_penalty=0.40,
+    )
+    winners = ([1] * 5 + [2] * 5 + [3] * 5) * 2
+    observations = record_sequence(engine, winners)
+
+    view = engine.replay(observations)
+
+    assert view["selected_component_count"] == 3
+    assert sorted(item["vote_count"] for item in view["components"]) == [10, 10, 10]
+    centers = np.asarray([item["center"] for item in view["components"]])
+    assert centers[:, 0].min() < -0.5
+    assert centers[:, 0].max() > 0.5
+    assert centers[:, 1].max() > 0.4
+
+
 def test_observation_ids_are_command_idempotent() -> None:
     first = deterministic_observation_id("session-one", "command-one")
     second = deterministic_observation_id("session-one", "command-one")
