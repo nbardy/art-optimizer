@@ -20,6 +20,7 @@ from .domain import (
     NewWorldPayload,
     RestorePayload,
 )
+from .emergent_experiment import EmergentTasteExperiment
 from .model_codec import model_catalog
 from .service import ConflictError, NotFoundError, OperationError
 from .ui_experiments import (
@@ -30,10 +31,19 @@ from .ui_experiments import (
 )
 
 
+def _stream_headers() -> dict[str, str]:
+    return {
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.ensure_directories()
     service = build_service(settings)
+    emergent_tastes = EmergentTasteExperiment(service)
     default_static_dir = Path(__file__).with_name("static").resolve()
     static_dir = Path(
         os.environ.get("ART_OPTIMIZER_STATIC_DIR", str(default_static_dir))
@@ -59,6 +69,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Art Optimizer", version="0.4.0", lifespan=lifespan)
     app.state.service = service
+    app.state.emergent_tastes = emergent_tastes
     app.mount("/assets", StaticFiles(directory=settings.artifacts_dir), name="assets")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -110,6 +121,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "license_id": capabilities.license_id,
             "license_url": capabilities.license_url,
             "ui": active_ui_id,
+            "treatments": ["t0-controlled-search", "emergent-tastes"],
             "data_dir": str(settings.data_dir),
         }
 
@@ -134,11 +146,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return StreamingResponse(
             service.stream(session_id),
             media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache, no-transform",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
+            headers=_stream_headers(),
         )
 
     @app.get("/api/sessions/{session_id}/event-log")
@@ -179,6 +187,58 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: RestorePayload,
     ) -> dict[str, object]:
         return await service.restore(session_id, branch_node_id, payload)
+
+    @app.post("/api/emergent-tastes/sessions")
+    async def create_emergent_session(
+        request: CreateSessionRequest,
+    ) -> dict[str, object]:
+        return await emergent_tastes.create_session(request)
+
+    @app.get("/api/emergent-tastes/sessions/{session_id}")
+    async def get_emergent_session(session_id: str) -> dict[str, object]:
+        return await emergent_tastes.get_snapshot(session_id)
+
+    @app.get("/api/emergent-tastes/sessions/{session_id}/events")
+    async def stream_emergent_events(session_id: str) -> StreamingResponse:
+        return StreamingResponse(
+            emergent_tastes.stream(session_id),
+            media_type="text/event-stream",
+            headers=_stream_headers(),
+        )
+
+    @app.post(
+        "/api/emergent-tastes/sessions/{session_id}/candidates/{candidate_id}/commit"
+    )
+    async def commit_emergent_candidate(
+        session_id: str,
+        candidate_id: str,
+        payload: CommitPayload,
+    ) -> dict[str, object]:
+        return await emergent_tastes.commit_candidate(session_id, candidate_id, payload)
+
+    @app.post("/api/emergent-tastes/sessions/{session_id}/none-of-these")
+    async def emergent_none_of_these(
+        session_id: str,
+        payload: ExposurePayload,
+    ) -> dict[str, object]:
+        return await emergent_tastes.none_of_these(session_id, payload)
+
+    @app.post("/api/emergent-tastes/sessions/{session_id}/explore")
+    async def emergent_explore(
+        session_id: str,
+        payload: ExposurePayload,
+    ) -> dict[str, object]:
+        return await emergent_tastes.explore(session_id, payload)
+
+    @app.post(
+        "/api/emergent-tastes/sessions/{session_id}/history/{branch_node_id}/restore"
+    )
+    async def restore_emergent_taste(
+        session_id: str,
+        branch_node_id: str,
+        payload: RestorePayload,
+    ) -> dict[str, object]:
+        return await emergent_tastes.restore(session_id, branch_node_id, payload)
 
     return app
 
