@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
@@ -43,7 +44,7 @@ class EmergentTasteExperiment:
 
     Candidate generation remains fixed-seed embedding/action search. This wrapper
     changes command vocabulary and adds one replayable taste inference projection;
-    it does not mutate the legacy atlas or browser ConceptLibrary.
+    it leaves the T0 planner/state machine authoritative and owns no browser-local learner.
     """
 
     service: ArtOptimizerService
@@ -195,8 +196,9 @@ class EmergentTasteExperiment:
         branch_node_id: str,
         payload: RestorePayload,
     ) -> dict[str, Any]:
-        result = await self.service.restore(session_id, branch_node_id, payload)
-        return await self._augment(result)
+        async with self._lock_for(session_id):
+            result = await self.service.restore(session_id, branch_node_id, payload)
+            return await self._augment(result)
 
     async def _append_observation(
         self,
@@ -242,7 +244,24 @@ class EmergentTasteExperiment:
             "taste_policy": cache.engine.revision,
             "planner_authority": "legacy T0 learner held constant for ablation",
         }
-        payload["emergent_tastes"] = cache.engine.public_view(cache.state)
+        taste_view = cache.engine.public_view(cache.state)
+        anchor_observations = {
+            item.observation_id
+            for item in cache.observations
+            if item.winner_index == 0
+        }
+        for component in taste_view["components"]:
+            component["exemplars"] = [
+                item
+                for item in component["exemplars"]
+                if item["observation_id"] not in anchor_observations
+            ]
+            component["latest_branch_node_id"] = (
+                component["exemplars"][-1]["branch_node_id"]
+                if component["exemplars"]
+                else None
+            )
+        payload["emergent_tastes"] = taste_view
         return payload
 
     async def _load_cache_for_session(self, session_id: str) -> _ProjectionCache:
@@ -327,7 +346,7 @@ class EmergentTasteExperiment:
             request_id=payload.request_id,
             round_id=round_state["round_id"],
             seed=int(snapshot["world"]["seed"]),
-            control_basis_revision=current["control_basis_revision"],
+            control_basis_revision=self._fixed_root_scope(snapshot),
             anchor=TasteDesignRef(
                 design_id=current["design_id"],
                 action=current["action"],
@@ -349,6 +368,20 @@ class EmergentTasteExperiment:
             created_at=utc_now(),
             observation_weight=observation_weight,
         )
+
+    @staticmethod
+    def _fixed_root_scope(snapshot: dict[str, Any]) -> str:
+        current = snapshot["current_design"]
+        material = "\0".join(
+            (
+                str(snapshot["world"]["seed"]),
+                snapshot["prompt"],
+                current["renderer_revision"],
+                current["control_basis_revision"],
+            )
+        )
+        digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
+        return f"fixed-root-scope/v1:{digest}:{current['control_basis_revision']}"
 
     def _lock_for(self, session_id: str) -> asyncio.Lock:
         lock = self._locks.get(session_id)
