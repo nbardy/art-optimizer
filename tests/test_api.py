@@ -7,7 +7,13 @@ from art_optimizer.config import Settings
 from art_optimizer.domain import NewWorldPayload
 
 
-UI_IDS = {"current-image", "implicit-lanes", "concept-shelf", "lane-board"}
+UI_IDS = {
+    "current-image",
+    "implicit-lanes",
+    "concept-shelf",
+    "lane-board",
+    "emergent-tastes",
+}
 
 
 def make_settings(tmp_path: Path) -> Settings:
@@ -32,6 +38,7 @@ def test_health_models_ui_catalog_and_validation(tmp_path: Path) -> None:
         assert health.json()["osi_open_source"] is True
         assert health.json()["content_filter_required"] is False
         assert health.json()["ui"] == "current-image"
+        assert "emergent-tastes" in health.json()["treatments"]
 
         models = client.get("/api/models")
         assert models.status_code == 200
