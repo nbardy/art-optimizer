@@ -1,62 +1,91 @@
 # Art Optimizer
 
-Art Optimizer is an open research platform for human-in-the-loop image search, image-evolution experiments, and persistent visual preference learning.
+Art Optimizer is an open research platform for human-in-the-loop image search,
+embedding-space experiments, and persistent visual-preference learning.
 
-## Current status
+## Experiment launcher
 
-The current runnable treatment is **T0 Controlled Search**:
+The bundled root route is always an experiment catalog:
+
+```text
+http://localhost:8000/
+```
+
+Every interface remains available at a stable route:
+
+```text
+/ui/current-image       T0 controlled-search baseline
+/ui/implicit-lanes      T0 presentation variant
+/ui/concept-shelf       T0 presentation variant
+/ui/lane-board          T0 presentation variant
+/ui/emergent-tastes     fixed-root emergent-taste treatment
+```
+
+There is no process-level UI selector. `ART_OPTIMIZER_UI` is not read. Experiment
+identity belongs in the route, so one running server exposes every treatment.
+
+`ART_OPTIMIZER_STATIC_DIR` remains available for deployment-specific custom static
+applications. A custom directory supplies its own root `index.html` and does not
+expose the bundled experiment routes.
+
+## T0 controlled search
 
 ```text
 prompt-conditioned control chart
     → four rendered alternatives
     → exposure-aware choice
     → branch-local preference update
-    → exact history and replay
+    → exact history restoration
 ```
 
-It is technically stable and useful as a baseline. Round 1 testing showed that it should **not** yet be described as:
+The first four routes share this generation and learning policy.
 
-- parent-conditioned image evolution;
-- learned visual-concept discovery;
-- perceptually diverse candidate generation;
-- or several independent algorithm/UI experiments.
-
-The current implementation searches eight hand-authored prompt-embedding directions. Selecting a candidate promotes that rendered point and action; it does not pass the selected image back into FLUX as a generative parent. The browser concept shelf stores accepted action movements rather than recurring visual patterns.
-
-Start with:
-
-- [`ROADMAP.md`](ROADMAP.md) — Round 2 sequence and promotion gates;
-- [`docs/README.md`](docs/README.md) — documentation status and authority;
-- [`reviews/11_ROUND_1_ROOT_CAUSE_REVIEW.md`](reviews/11_ROUND_1_ROOT_CAUSE_REVIEW.md) — Round 1 diagnosis;
-- [`experiments/round2/README.md`](experiments/round2/README.md) — planned treatments.
-
-## Repository map
+## Emergent tastes
 
 ```text
-art_optimizer/      executable application
- tests/              unit, integration, and browser-contract tests
- scripts/            operational and benchmark scripts
- docs/               architecture and implementation contracts
- reviews/            prior work, design reviews, postmortems, raw source notes
- experiments/        executable hypotheses and result receipts
- ROADMAP.md           current research/product sequence
+fixed seed + prompt + renderer
+    → four embedding/action variations
+    → predict the vote before training
+    → sticky ideal-point mixture refit
+    → expose only predictively supported taste modes
 ```
 
-See [`docs/REPOSITORY_STRUCTURE.md`](docs/REPOSITORY_STRUCTURE.md) for the staged organization plan.
+The `/ui/emergent-tastes` treatment adds truthful `None fit` versus neutral
+`New directions`, replayable taste projections, and representative exemplars. The
+T0 learner still chooses candidates in this first ablation.
 
-## What works today
+### Taste galleries
 
-- local procedural reference renderer;
-- local FLUX.2 Klein and Krea 2 Turbo Diffusers stacks;
-- model/codec selection without hosted generation APIs;
-- BF16 inference and ordinary Hugging Face caching;
-- browser UI with streamed candidates;
-- exposure-aware multinomial choice updates;
-- favorites, New world, exact history restoration, and branching;
-- SQLite persistence and render manifests;
-- original and concept-layout UI routes retained as T0 presentation variants.
+Click any exposed taste to render a gallery where:
 
-## Quick start: CPU reference renderer
+```text
+vertical axis     different deterministic seeds
+horizontal axis   different scalar strengths of the selected taste
+```
+
+For taste center \(\theta_k\) and strength \(s\):
+
+\[
+a(s,k)=\operatorname{clip}(s\theta_k,-1,1).
+\]
+
+Gallery rendering, previewing, and cell selection create no preference votes.
+Selecting **Continue as new fixed-root session** starts a fresh session at the
+cell's exact seed and action with an empty emergent-taste evidence stream.
+
+See [`docs/TASTE_GALLERIES.md`](docs/TASTE_GALLERIES.md).
+
+## Honest boundary
+
+The renderer currently searches eight authored controls. The emergent engine learns
+preferred regions over those coordinates; it does not discover or name reusable
+visual attributes. It is not yet parent-conditioned image evolution or cross-prompt
+taste transport.
+
+The emergent projection also remains non-authoritative, and the base session mutation
+and taste-event append are not yet one SQLite transaction.
+
+## Quick start
 
 Python 3.11 or newer is required.
 
@@ -67,11 +96,7 @@ pip install -e '.[dev]'
 make dev
 ```
 
-Open:
-
-```text
-http://localhost:8000
-```
+Open `http://localhost:8000/` and choose an experiment.
 
 ## Local open-weight models
 
@@ -101,73 +126,16 @@ ART_OPTIMIZER_IMAGE_SIZE=1024 \
 python -m art_optimizer.app --host 127.0.0.1 --port 8000
 ```
 
-Hugging Face downloads missing files into its normal cache and reuses them on later runs. The application data directory stores session state, generated artifacts, and manifests—not duplicate model weights.
-
-Useful options:
-
-```bash
-export HF_TOKEN=...                         # only if the model requires access
-export HF_HOME=/path/with/more/disk        # optional cache location
-export ART_OPTIMIZER_LOCAL_FILES_ONLY=1    # require cached/local files
-export ART_OPTIMIZER_MODEL_REVISION=...    # pin a checkpoint revision
-export ART_OPTIMIZER_CPU_OFFLOAD=1          # reduce VRAM at a latency cost
-export ART_OPTIMIZER_CONDITIONING_MODE=prompt  # prompt-string baseline
-```
-
-## UI routes
-
-The original UI remains available alongside the Round 1 concept-layout variants:
-
-```text
-/ui/current-image
-/ui/implicit-lanes
-/ui/concept-shelf
-/ui/lane-board
-```
-
-These currently share the same backend policy and should be treated as **presentation variants**, not independent optimization treatments. Round 2 will define complete policy bundles before calling interfaces separate experiments.
-
-Choose the root route at startup:
-
-```bash
-ART_OPTIMIZER_UI=current-image python -m art_optimizer.app
-```
-
-## Remote access
-
-Bind the server to loopback and use an SSH tunnel:
-
-```bash
-# GPU node
-python -m art_optimizer.app --host 127.0.0.1 --port 8000
-
-# laptop
-ssh -L 8000:127.0.0.1:8000 user@node
-```
-
-Then open `http://localhost:8000`.
-
-The development server does not provide authentication or TLS. Do not expose it directly to the public Internet; use an SSH tunnel, VPN, or authenticated HTTPS reverse proxy.
-
-## Research direction
-
-Round 2 separates four lines of work:
-
-1. **Truthful controlled search** — split neutral novelty from negative preference and measure diversity on outputs.
-2. **Random soft-direction search** — explore calibrated conditioning directions that may be difficult to express as strings.
-3. **True image evolution** — add parent-conditioned rendering and preservation constraints.
-4. **Provisional visual concepts** — require recurring visual evidence before a learned object becomes composable.
-
-The current baseline remains runnable throughout so each intervention has an honest comparison.
-
 ## Tests
 
 ```bash
-python -m compileall -q art_optimizer tests scripts
 python -m ruff check .
+python -m compileall -q art_optimizer tests scripts
 python -m pytest
-node --check art_optimizer/static/app.js
-node --test tests/js/test_concept_library.mjs
+for file in art_optimizer/static/*.js; do node --check "$file"; done
+node tests/js/test_concept_library.mjs
+node tests/js/test_emergent_tastes.mjs
+node tests/js/test_taste_gallery.mjs
 ```
 
 With a server running:
@@ -178,21 +146,25 @@ python scripts/smoke_test.py http://localhost:8000
 
 ## API
 
+Core and catalog:
+
 ```text
+GET  /
 GET  /healthz
 GET  /api/models
 GET  /api/ui-experiments
-POST /api/sessions
-GET  /api/sessions/{session_id}
-GET  /api/sessions/{session_id}/events
-GET  /api/sessions/{session_id}/event-log
-POST /api/sessions/{session_id}/candidates/{candidate_id}/commit
-POST /api/sessions/{session_id}/reroll
-POST /api/sessions/{session_id}/new-world
-POST /api/sessions/{session_id}/designs/{design_id}/favorite
-POST /api/sessions/{session_id}/history/{branch_node_id}/restore
+GET  /ui/{experiment_id}
 ```
 
-## Licenses
+Emergent taste galleries:
 
-Art Optimizer code is licensed under the [MIT License](LICENSE). Model checkpoints, datasets, references, and generated-media obligations retain their own licenses. FLUX.2 Klein 4B is Apache-2.0. Krea 2 uses the Krea 2 Community License rather than an OSI-approved open-source license; review its commercial and deployment terms before use.
+```text
+POST /api/emergent-tastes/sessions/{session_id}/tastes/{taste_id}/gallery
+GET  /api/emergent-tastes/sessions/{session_id}/galleries/{gallery_id}
+POST /api/emergent-tastes/sessions/{session_id}/galleries/{gallery_id}/cells/{cell_id}/activate
+```
+
+## License
+
+Art Optimizer code is licensed under the [MIT License](LICENSE). Model checkpoints,
+datasets, and generated-media obligations retain their own licenses.

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -11,46 +10,60 @@ class UIExperiment:
     label: str
     description: str
     filename: str
+    treatment_id: str
     concept_controls: str
 
     def public_metadata(self) -> dict[str, str]:
-        return asdict(self)
+        payload = asdict(self)
+        payload["route"] = f"/ui/{self.experiment_id}"
+        return payload
 
 
 _EXPERIMENTS = {
     "current-image": UIExperiment(
         experiment_id="current-image",
         label="Current image",
-        description="The original one-canvas, four-corner committed-image interaction.",
+        description="The original one-canvas, four-corner controlled-search interaction.",
         filename="index.html",
+        treatment_id="t0-controlled-search",
         concept_controls="none",
     ),
     "implicit-lanes": UIExperiment(
         experiment_id="implicit-lanes",
         label="Implicit lanes",
         description=(
-            "Choices learn reusable directions automatically; concept controls stay behind "
-            "progressive disclosure."
+            "T0 presentation variant with automatically grouped browser-local directions."
         ),
         filename="implicit.html",
+        treatment_id="t0-controlled-search",
         concept_controls="optional",
     ),
     "concept-shelf": UIExperiment(
         experiment_id="concept-shelf",
         label="Concept shelf",
-        description="A visible shelf composes learned non-prompt directions with tri-state control.",
+        description="T0 presentation variant with a visible browser-local direction shelf.",
         filename="shelf.html",
+        treatment_id="t0-controlled-search",
         concept_controls="visible",
     ),
     "lane-board": UIExperiment(
         experiment_id="lane-board",
         label="Lane board",
-        description=(
-            "Candidates are organized by whether they reinforce active concepts, reopen an "
-            "inactive concept, or explore unexplained space."
-        ),
+        description="T0 presentation variant that groups candidates by heuristic lanes.",
         filename="lanes.html",
+        treatment_id="t0-controlled-search",
         concept_controls="structural",
+    ),
+    "emergent-tastes": UIExperiment(
+        experiment_id="emergent-tastes",
+        label="Emergent tastes",
+        description=(
+            "Fixed-root embedding search with chronologically tested latent taste modes "
+            "and seed-by-strength taste galleries."
+        ),
+        filename="emergent.html",
+        treatment_id="emergent-tastes",
+        concept_controls="emergent",
     ),
 }
 
@@ -67,11 +80,9 @@ def get_ui_experiment(experiment_id: str) -> UIExperiment:
     return experiment
 
 
-def selected_ui_id() -> str:
-    return os.environ.get("ART_OPTIMIZER_UI", "current-image").strip().lower()
-
-
 def validate_ui_files(static_dir: Path) -> None:
-    missing = [item.filename for item in _EXPERIMENTS.values() if not (static_dir / item.filename).is_file()]
+    required = ["experiments.html", "experiments.js", "experiments.css"]
+    required.extend(item.filename for item in _EXPERIMENTS.values())
+    missing = [filename for filename in required if not (static_dir / filename).is_file()]
     if missing:
         raise ValueError(f"UI directory is missing bundled experiments: {', '.join(missing)}")

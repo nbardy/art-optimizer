@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#080808" />
+    <title>Art Optimizer Experiments</title>
+    <link rel="stylesheet" href="/static/experiments.css" />
+  </head>
+  <body>
+    <main class="launcher-shell">
+      <header class="launcher-header">
+        <p class="eyebrow">Human-in-the-loop image search</p>
+        <h1>Art Optimizer</h1>
+        <p class="intro">
+          Every interface remains available at a stable route. Choose an experiment; process
+          startup never hides or replaces the catalog.
+        </p>
+      </header>
+      <section id="experiment-list" class="experiment-grid" aria-live="polite">
+        <p class="loading">Loading experiments…</p>
+      </section>
+      <footer>
+        <span id="runtime-label">Checking runtime…</span>
+        <a href="/healthz">health</a>
+      </footer>
+    </main>
+    <script type="module" src="/static/experiments.js"></script>
+  </body>
+</html>

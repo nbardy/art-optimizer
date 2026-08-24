@@ -7,7 +7,13 @@ from art_optimizer.config import Settings
 from art_optimizer.domain import NewWorldPayload
 
 
-UI_IDS = {"current-image", "implicit-lanes", "concept-shelf", "lane-board"}
+UI_IDS = {
+    "current-image",
+    "implicit-lanes",
+    "concept-shelf",
+    "lane-board",
+    "emergent-tastes",
+}
 
 
 def make_settings(tmp_path: Path) -> Settings:
@@ -19,7 +25,8 @@ def make_settings(tmp_path: Path) -> Settings:
     )
 
 
-def test_health_models_ui_catalog_and_validation(tmp_path: Path) -> None:
+def test_health_models_ui_catalog_and_validation(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("ART_OPTIMIZER_UI", "emergent-tastes")
     with TestClient(create_app(make_settings(tmp_path))) as client:
         health = client.get("/healthz")
         assert health.status_code == 200
@@ -31,7 +38,8 @@ def test_health_models_ui_catalog_and_validation(tmp_path: Path) -> None:
         assert health.json()["replay_level"] == "exact"
         assert health.json()["osi_open_source"] is True
         assert health.json()["content_filter_required"] is False
-        assert health.json()["ui"] == "current-image"
+        assert health.json()["ui"] == "experiment-catalog"
+        assert "emergent-tastes" in health.json()["treatments"]
 
         models = client.get("/api/models")
         assert models.status_code == 200
@@ -41,6 +49,7 @@ def test_health_models_ui_catalog_and_validation(tmp_path: Path) -> None:
         experiments = client.get("/api/ui-experiments")
         assert experiments.status_code == 200
         assert {item["experiment_id"] for item in experiments.json()} == UI_IDS
+        assert all(item["route"].startswith("/ui/") for item in experiments.json())
         for experiment_id in UI_IDS:
             page = client.get(f"/ui/{experiment_id}")
             assert page.status_code == 200
@@ -49,7 +58,8 @@ def test_health_models_ui_catalog_and_validation(tmp_path: Path) -> None:
 
         index = client.get("/")
         assert index.status_code == 200
-        assert "Art Optimizer" in index.text
+        assert "Art Optimizer Experiments" in index.text
+        assert "emergent_tastes.js" not in index.text
 
         invalid = client.post("/api/sessions", json={"prompt": "   "})
         assert invalid.status_code == 422
@@ -93,9 +103,7 @@ def test_composition_reset_uses_explicit_concept_action(tmp_path: Path) -> None:
         assert snapshot["world"]["initialization_mode"] == "composition"
         assert snapshot["world"]["initialization_action"] == target
 
-        events = client.get(
-            f"/api/sessions/{created['session_id']}/event-log"
-        ).json()
+        events = client.get(f"/api/sessions/{created['session_id']}/event-log").json()
         world_created = [event for event in events if event["kind"] == "world_created"][-1]
         assert world_created["payload"]["mode"] == "composition"
         assert world_created["payload"]["initial_action"] == target

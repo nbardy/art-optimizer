@@ -39,6 +39,8 @@ jobs:
           python -m compileall -q art_optimizer tests scripts
           for file in art_optimizer/static/*.js; do node --check "$file"; done
           node tests/js/test_concept_library.mjs
+          node tests/js/test_emergent_tastes.mjs
+          node tests/js/test_taste_gallery.mjs
 
       - name: Unit and integration tests
         run: |
@@ -60,6 +62,8 @@ jobs:
             sleep 0.25
           done
           curl --fail --silent http://127.0.0.1:8765/healthz > test-results/health.json
+          curl --fail --silent http://127.0.0.1:8765/ > test-results/experiments.html
+          curl --fail --silent http://127.0.0.1:8765/ui/emergent-tastes > test-results/emergent.html
           python scripts/smoke_test.py http://127.0.0.1:8765 | tee test-results/smoke.log
 
       - name: Upload diagnostics
