@@ -23,12 +23,12 @@ from .domain import (
 from .emergent_experiment import EmergentTasteExperiment
 from .model_codec import model_catalog
 from .service import ConflictError, NotFoundError, OperationError
-from .ui_experiments import (
-    get_ui_experiment,
-    selected_ui_id,
-    ui_catalog,
-    validate_ui_files,
+from .taste_gallery import (
+    TasteGalleryActivationPayload,
+    TasteGalleryRequest,
+    TasteGalleryService,
 )
+from .ui_experiments import get_ui_experiment, ui_catalog, validate_ui_files
 
 
 def _stream_headers() -> dict[str, str]:
@@ -44,6 +44,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings.ensure_directories()
     service = build_service(settings)
     emergent_tastes = EmergentTasteExperiment(service)
+    taste_galleries = TasteGalleryService(service, emergent_tastes)
     default_static_dir = Path(__file__).with_name("static").resolve()
     static_dir = Path(
         os.environ.get("ART_OPTIMIZER_STATIC_DIR", str(default_static_dir))
@@ -51,9 +52,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     bundled_ui = static_dir == default_static_dir
     if bundled_ui:
         validate_ui_files(static_dir)
-        default_ui = get_ui_experiment(selected_ui_id())
-        root_filename = default_ui.filename
-        active_ui_id = default_ui.experiment_id
+        root_filename = "experiments.html"
+        active_ui_id = "experiment-catalog"
     else:
         root_filename = "index.html"
         if not (static_dir / root_filename).is_file():
@@ -67,9 +67,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await service.shutdown()
 
-    app = FastAPI(title="Art Optimizer", version="0.4.0", lifespan=lifespan)
+    app = FastAPI(title="Art Optimizer", version="0.5.0", lifespan=lifespan)
     app.state.service = service
     app.state.emergent_tastes = emergent_tastes
+    app.state.taste_galleries = taste_galleries
     app.mount("/assets", StaticFiles(directory=settings.artifacts_dir), name="assets")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -239,6 +240,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: RestorePayload,
     ) -> dict[str, object]:
         return await emergent_tastes.restore(session_id, branch_node_id, payload)
+
+    @app.post(
+        "/api/emergent-tastes/sessions/{session_id}/tastes/{taste_id}/gallery"
+    )
+    async def generate_taste_gallery(
+        session_id: str,
+        taste_id: str,
+        payload: TasteGalleryRequest,
+    ) -> dict[str, object]:
+        return await taste_galleries.generate(session_id, taste_id, payload)
+
+    @app.get("/api/emergent-tastes/sessions/{session_id}/galleries/{gallery_id}")
+    async def get_taste_gallery(
+        session_id: str,
+        gallery_id: str,
+    ) -> dict[str, object]:
+        return await taste_galleries.get(session_id, gallery_id)
+
+    @app.post(
+        "/api/emergent-tastes/sessions/{session_id}/galleries/{gallery_id}/"
+        "cells/{cell_id}/activate"
+    )
+    async def activate_taste_gallery_cell(
+        session_id: str,
+        gallery_id: str,
+        cell_id: str,
+        payload: TasteGalleryActivationPayload,
+    ) -> dict[str, object]:
+        return await taste_galleries.activate(
+            session_id,
+            gallery_id,
+            cell_id,
+            payload,
+        )
 
     return app
 

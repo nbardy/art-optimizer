@@ -7,6 +7,7 @@
     <title>Art Optimizer — Emergent Tastes</title>
     <link rel="stylesheet" href="/static/styles.css" />
     <link rel="stylesheet" href="/static/emergent.css" />
+    <link rel="stylesheet" href="/static/taste_gallery.css" />
   </head>
   <body>
     <main id="app" class="app-shell" aria-live="polite">
@@ -16,22 +17,23 @@
           <h1>Emergent tastes</h1>
           <p class="start-copy">
             Vote on four embedding variations while the stochastic root stays fixed. The system
-            predicts every vote before learning it and only reveals another taste when that model
+            predicts every vote before learning it and reveals another taste only when that model
             keeps predicting better over time.
           </p>
           <form id="start-form">
             <label for="prompt">Initial conditions</label>
             <textarea id="prompt" rows="3">an evolving impossible garden</textarea>
+
             <button type="submit" class="primary-button">Begin fixed-root search</button>
           </form>
           <div class="experiment-contract" aria-label="Experiment contract">
-            <span>FIXED</span><strong>seed · prompt · renderer</strong>
+            <span>FIXED</span><strong>seed · prompt · renderer · control scope</strong>
             <span>VARIED</span><strong>embedding/action coordinates</strong>
             <span>LEARNED</span><strong>chronologically tested taste modes</strong>
           </div>
           <p class="renderer-note">
-            This treatment keeps the existing candidate policy as a control while testing the new
-            taste inference and UX. <a href="/ui/current-image">Open the T0 baseline</a>.
+            Taste galleries vary seed by row and taste strength by column, but gallery browsing
+            creates no preference evidence. <a href="/">Open all experiments</a>.
           </p>
         </div>
       </section>
@@ -45,7 +47,7 @@
           </div>
           <div class="top-meta">
             <span class="fixed-root-indicator">● FIXED ROOT</span>
-            <a href="/ui/current-image">T0 BASELINE</a>
+            <a href="/">EXPERIMENTS</a>
             <span id="connection-label" class="connection">connecting</span>
           </div>
         </header>
@@ -74,8 +76,8 @@
             <div id="taste-list" class="taste-list"></div>
             <div id="model-scoreboard" class="model-scoreboard"></div>
             <p class="taste-footnote">
-              Tastes are unnamed preferred regions, not claimed visual attributes. Resume returns
-              to a representative branch; it does not relabel or double-count a vote.
+              Click a taste to inspect a seed-by-strength gallery. Tastes are preferred regions,
+              not claimed visual attributes.
             </p>
           </aside>
         </section>
@@ -105,6 +107,53 @@
         <div id="toast" class="toast hidden" role="status"></div>
       </section>
     </main>
+
+    <div id="taste-gallery-overlay" class="taste-gallery-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="taste-gallery-title">
+      <section class="taste-gallery-panel">
+        <header class="taste-gallery-header">
+          <div>
+            <p class="eyebrow">Taste inspection · no training</p>
+            <h2 id="taste-gallery-title">Taste gallery</h2>
+            <p id="taste-gallery-subtitle">Rows vary seed. Columns vary scalar taste strength.</p>
+          </div>
+          <button id="taste-gallery-close" class="gallery-icon-button" type="button" aria-label="Close gallery">×</button>
+        </header>
+
+        <div class="taste-gallery-controls">
+          <label>
+            Seed rows
+            <select id="taste-gallery-rows">
+              <option value="3">3</option>
+              <option value="4" selected>4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </label>
+          <label>
+            Strength sweep
+            <select id="taste-gallery-strengths">
+              <option value="0.25,0.5,0.75,1,1.25" selected>0.25 → 1.25</option>
+              <option value="0,0.25,0.5,0.75,1">neutral → full</option>
+              <option value="0.5,0.75,1,1.25,1.5">0.5 → 1.5</option>
+              <option value="0,0.5,1,1.5,2">wide 0 → 2</option>
+            </select>
+          </label>
+          <button id="taste-gallery-regenerate" class="command-button" type="button">Shuffle seed rows</button>
+        </div>
+
+        <div id="taste-gallery-loading" class="taste-gallery-loading hidden">Rendering the taste across seeds and strengths…</div>
+        <div id="taste-gallery-grid" class="taste-gallery-grid"></div>
+
+        <footer class="taste-gallery-footer">
+          <div id="taste-gallery-selection" class="taste-gallery-selection">Select a cell to inspect it.</div>
+          <button id="taste-gallery-activate" class="primary-button" type="button" disabled>
+            Continue as new fixed-root session
+          </button>
+        </footer>
+      </section>
+    </div>
+
     <script type="module" src="/static/emergent_tastes.js"></script>
+    <script type="module" src="/static/taste_gallery.js"></script>
   </body>
 </html>
