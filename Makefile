@@ -1,4 +1,4 @@
-.PHONY: dev test lint check smoke docker
+.PHONY: dev test lint browser check smoke docker
 
 PORT ?= 8000
 
@@ -11,9 +11,14 @@ test:
 lint:
 	python -m ruff check .
 	python -m compileall -q art_optimizer tests scripts
-	node --check art_optimizer/static/app.js
+	for file in art_optimizer/static/*.js; do node --check "$$file"; done
 
-check: lint test
+browser:
+	node tests/js/test_concept_library.mjs
+	node tests/js/test_emergent_tastes.mjs
+	node tests/js/test_taste_gallery.mjs
+
+check: lint browser test
 
 smoke:
 	python scripts/smoke_test.py http://127.0.0.1:$(PORT)
