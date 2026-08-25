@@ -1,54 +1,60 @@
 # Contributing to Art Optimizer
 
-Art Optimizer is currently a research-and-design-stage open-source project. Contributions are welcome, especially when they make an assumption executable, measurable, or easier for users to understand.
+Art Optimizer is a local research application for fixed-root generative search and preference experiments. Contributions should make the current experiment smaller, more correct, more measurable, or easier to understand.
 
-## Useful contribution types
+## Before changing behavior
 
-- interface prototypes for the single-canvas/four-corner interaction;
-- renderer adapters for open image models;
-- deterministic seed and initial-noise replay tests;
-- preferential-learning and slate-selection implementations;
-- simulated-user benchmarks for optimizer behavior;
-- accessibility and touch-interaction improvements;
-- research notes that distinguish demonstrated results from hypotheses;
-- safety, provenance, licensing, and dataset documentation.
+Preserve these distinctions unless the change explicitly defines a new treatment:
 
-## Design rules
+- preview is not commit;
+- navigation is not durable preference;
+- `New directions` is neutral exploration;
+- `None fit` is weak anchor preference;
+- gallery inspection is not preference evidence;
+- fixed-root search is not parent-conditioned image evolution;
+- action-preference modes are not automatically semantic visual attributes.
 
-Changes should preserve the core distinctions in the documentation:
+## Development gate
 
-- preview versus commit;
-- navigation choice versus durable favorite;
-- reroll versus new-world reset;
-- integer seed versus materialized noise state;
-- rendered asset versus authoritative generative state;
-- long-term taste prior versus branch-local preference;
-- model-independent product contracts versus model-specific interventions.
+Use Python 3.11 or newer and Node 22 or newer.
 
-A proposal that intentionally changes one of these distinctions should explain why and update the relevant architecture decision and tests.
+```bash
+pip install -e '.[dev]'
+make check
+```
+
+For live verification:
+
+```bash
+make dev
+make smoke
+```
+
+The repository intentionally does not use hosted GitHub Actions. Include the local verification result in the pull-request description.
 
 ## Pull requests
 
-A focused pull request should include:
+Keep changes narrow. A useful pull request states:
 
 1. the user or research problem;
-2. the changed behavior or contract;
-3. evidence, benchmarks, or a test plan;
+2. the exact behavior or contract changed;
+3. tests or failure injection covering it;
 4. compatibility and migration impact;
-5. model, dataset, and dependency license implications;
-6. screenshots or a short recording for interface changes.
+5. model, dataset, and dependency-license implications;
+6. explicit non-claims.
 
-Do not present vendor benchmark claims as independent measurements. Record hardware, precision, resolution, batch size, inference steps, software revisions, and warm/cold state for performance results.
+Do not combine renderer, learner, planner, and UI changes into one experiment unless the treatment definition requires that bundle.
 
-## Development direction
+## Research evidence
 
-The intended initial stack is a TypeScript web client plus a Python control plane, optimizer, and renderer. Exact dependency choices remain open until the first executable vertical slice lands. See:
+Record enough provenance to reproduce a claim:
 
-- [UI design](docs/UI_DESIGN.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Code design](docs/CODE_DESIGN.md)
-- [Research notes](docs/RESEARCH_NOTES.md)
+- model and resolved revision;
+- renderer, codec, conditioning mode, and control-basis revision;
+- prompt and seed;
+- action or strength values;
+- hardware, dtype, resolution, and inference steps;
+- cold/warm state and latency;
+- failure cases.
 
-## Conduct
-
-Be direct about uncertainty, kind in review, and generous with attribution. Creative-preference systems can easily overstate what they infer about a person; describe observed interaction evidence rather than claiming to know a user’s identity or essential taste.
+Describe observed interaction evidence rather than claiming an essential or permanent user taste.
