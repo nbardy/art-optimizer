@@ -276,7 +276,7 @@ def fit_model(
             centers = next_centers
             responsibilities = next_responsibilities
             iterations = iteration
-            if delta < 1e-7 and movement < 1e-6:
+            if delta < 1e-6 and movement < 1e-3:
                 converged = True
                 break
             previous_objective = objective
