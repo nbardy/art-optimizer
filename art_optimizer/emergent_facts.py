@@ -30,6 +30,38 @@ def has_observation(
     )
 
 
+def validate_command_identity(
+    service: ArtOptimizerService,
+    session_id: str,
+    *,
+    observation_id: str,
+    command_kind: str,
+    candidate_id: str | None,
+    observation: TasteChoiceObservation | None = None,
+) -> None:
+    existing = next(
+        (
+            event
+            for event in service.store.list_events(session_id)
+            if event["kind"] == PENDING_EVENT_KIND
+            and event["payload"].get("observation_id") == observation_id
+        ),
+        None,
+    )
+    if existing is None:
+        return
+    payload = existing["payload"]
+    if (
+        payload.get("command_kind") != command_kind
+        or payload.get("candidate_id") != candidate_id
+    ):
+        raise ConflictError("request_id was already used for a different command")
+    if observation is not None:
+        recorded = TasteChoiceObservation.model_validate(payload["observation"])
+        if recorded.model_dump(mode="json") != observation.model_dump(mode="json"):
+            raise ConflictError("request_id was already used for different evidence")
+
+
 def append_pending(
     service: ArtOptimizerService,
     session_id: str,
@@ -38,6 +70,14 @@ def append_pending(
     candidate_id: str | None,
     observation: TasteChoiceObservation,
 ) -> None:
+    validate_command_identity(
+        service,
+        session_id,
+        observation_id=observation.observation_id,
+        command_kind=command_kind,
+        candidate_id=candidate_id,
+        observation=observation,
+    )
     if any(
         event["kind"] == PENDING_EVENT_KIND
         and event["payload"].get("observation_id") == observation.observation_id
