@@ -18,6 +18,7 @@ from .emergent_facts import (
     has_observation,
     load_observations,
     recover_pending,
+    validate_command_identity,
 )
 from .emergent_taste import (
     EmergentTasteEngine,
@@ -91,6 +92,13 @@ class EmergentTasteExperiment:
         async with self._lock_for(session_id):
             recover_pending(self.service, session_id)
             observation_id = deterministic_observation_id(session_id, payload.request_id)
+            validate_command_identity(
+                self.service,
+                session_id,
+                observation_id=observation_id,
+                command_kind="commit_candidate",
+                candidate_id=candidate_id,
+            )
             if has_observation(self.service, session_id, observation_id):
                 return await self.get_snapshot(session_id)
 
@@ -149,6 +157,13 @@ class EmergentTasteExperiment:
         async with self._lock_for(session_id):
             recover_pending(self.service, session_id)
             observation_id = deterministic_observation_id(session_id, payload.request_id)
+            validate_command_identity(
+                self.service,
+                session_id,
+                observation_id=observation_id,
+                command_kind="none_of_these",
+                candidate_id=None,
+            )
             if has_observation(self.service, session_id, observation_id):
                 return await self.get_snapshot(session_id)
 
