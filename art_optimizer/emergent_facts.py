@@ -215,4 +215,5 @@ def build_observation(
         result_branch_node_id=branch_node_id,
         created_at=utc_now(),
         observation_weight=observation_weight,
+        receipt_semantics="power_evidence_v1",
     )
