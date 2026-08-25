@@ -79,17 +79,16 @@ class CleanArtOptimizerService(ArtOptimizerService):
                 state.search_state.consecutive_commits = 0
                 state.search_state.planner_step += 1
 
-                previous_branch_id = state.current_branch_node_id
                 checkpoint = BranchNode(
                     branch_node_id=new_id("branch"),
                     design_id=state.current_design_id,
-                    parent_branch_node_id=previous_branch_id,
+                    parent_branch_node_id=state.current_branch_node_id,
                     posterior=state.active_posterior.model_copy(deep=True),
                     search_state=state.search_state.model_copy(deep=True),
                 )
                 state.branches[checkpoint.branch_node_id] = checkpoint
                 state.current_branch_node_id = checkpoint.branch_node_id
-                self._remember_latest_design_checkpoint(state, checkpoint.branch_node_id)
+                self._remember_branch(state, checkpoint.branch_node_id)
 
                 round_state.status = "closed"
                 state.active_round = None
@@ -120,14 +119,3 @@ class CleanArtOptimizerService(ArtOptimizerService):
                 result,
             )
             return result
-
-    @staticmethod
-    def _remember_latest_design_checkpoint(state: Any, branch_node_id: str) -> None:
-        design_id = state.branches[branch_node_id].design_id
-        state.history = [
-            existing_id
-            for existing_id in state.history
-            if existing_id in state.branches
-            and state.branches[existing_id].design_id != design_id
-        ]
-        state.history.append(branch_node_id)
