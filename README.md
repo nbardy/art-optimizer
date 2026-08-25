@@ -1,89 +1,85 @@
 # Art Optimizer
 
-Art Optimizer is an open research platform for human-in-the-loop image search,
-embedding-space experiments, and persistent visual-preference learning.
+Art Optimizer is a local research application for fixed-root image search and human preference experiments.
 
-## Experiment launcher
+## Experiments
 
-The bundled root route is always an experiment catalog:
+Run one server and choose a treatment at:
 
 ```text
 http://localhost:8000/
 ```
 
-Every interface remains available at a stable route:
+Stable routes:
 
 ```text
 /ui/current-image       T0 controlled-search baseline
 /ui/implicit-lanes      T0 presentation variant
 /ui/concept-shelf       T0 presentation variant
 /ui/lane-board          T0 presentation variant
-/ui/emergent-tastes     fixed-root emergent-taste treatment
+/ui/emergent-tastes     fixed-root latent preference modes
 ```
 
-There is no process-level UI selector. `ART_OPTIMIZER_UI` is not read. Experiment
-identity belongs in the route, so one running server exposes every treatment.
+There is no process-level UI selector. Experiment identity belongs in the route.
 
-`ART_OPTIMIZER_STATIC_DIR` remains available for deployment-specific custom static
-applications. A custom directory supplies its own root `index.html` and does not
-expose the bundled experiment routes.
+## Current product contract
 
-## T0 controlled search
+The ordinary search loop keeps the prompt, renderer, control basis, and world seed fixed. Candidate variance comes from movement in the declared action/embedding coordinates.
+
+The emergent treatment records exact fixed-root choice slates and fits a small sticky mixture of ideal-point choice models. The resulting Taste A/B/C cards are **action-preference modes** supported by chronological choices. They are not yet learned semantic attributes or tastes extracted directly from image embeddings.
+
+Visible commands have distinct evidence semantics:
 
 ```text
-prompt-conditioned control chart
-    → four rendered alternatives
-    → exposure-aware choice
-    → branch-local preference update
-    → exact history restoration
+Choose candidate    full candidate preference + navigation
+None fit             weak anchor preference; no navigation
+New directions       wider proposals; no preference evidence
+Resume exemplar      navigation only; no new evidence
 ```
 
-The first four routes share this generation and learning policy.
+Every preference-bearing reroll now creates a recoverable branch checkpoint. Emergent observations use a durable pending/final protocol so a process crash after the base command can be repaired instead of dropping the vote.
 
-## Emergent tastes
+## Taste galleries
+
+Click an exposed taste to inspect:
 
 ```text
-fixed seed + prompt + renderer
-    → four embedding/action variations
-    → predict the vote before training
-    → sticky ideal-point mixture refit
-    → expose only predictively supported taste modes
+rows      deterministic seeds
+columns   scalar strengths of the fitted taste center
 ```
 
-The `/ui/emergent-tastes` treatment adds truthful `None fit` versus neutral
-`New directions`, replayable taste projections, and representative exemplars. The
-T0 learner still chooses candidates in this first ablation.
-
-### Taste galleries
-
-Click any exposed taste to render a gallery where:
-
-```text
-vertical axis     different deterministic seeds
-horizontal axis   different scalar strengths of the selected taste
-```
-
-For taste center \(\theta_k\) and strength \(s\):
+For center \(\theta_k\) and strength \(s\):
 
 \[
 a(s,k)=\operatorname{clip}(s\theta_k,-1,1).
 \]
 
-Gallery rendering, previewing, and cell selection create no preference votes.
-Selecting **Continue as new fixed-root session** starts a fresh session at the
-cell's exact seed and action with an empty emergent-taste evidence stream.
+Gallery browsing creates no preference evidence. Rendering is concurrency-bounded, deterministic by manifest, and cleans newly created partial artifacts if a cell fails. Continuing from a cell starts a fresh fixed-root session with zero copied votes.
 
 See [`docs/TASTE_GALLERIES.md`](docs/TASTE_GALLERIES.md).
 
 ## Honest boundary
 
-The renderer currently searches eight authored controls. The emergent engine learns
-preferred regions over those coordinates; it does not discover or name reusable
-visual attributes. It is not yet parent-conditioned image evolution or cross-prompt
-taste transport.
+Implemented:
 
-The emergent projection also remains non-authoritative, and the base session mutation
-and taste-event append are not yet one SQLite transaction.
+- local procedural renderer;
+- local FLUX.2 Klein and Krea 2 Turbo adapters;
+- fixed-root action/embedding search;
+- exact candidate selection and branch history;
+- exposure-aware T0 learner;
+- replayable latent action-preference modes;
+- seed-by-strength galleries;
+- SQLite persistence and deterministic render manifests.
+
+Not demonstrated:
+
+- validated semantic independence of the eight authored controls;
+- visual tastes learned directly from image sets;
+- reusable learned embedding directions;
+- taste-authoritative candidate planning;
+- parent-conditioned image evolution.
+
+Those remain research gates, not hidden implementation TODOs. See [`ROADMAP.md`](ROADMAP.md).
 
 ## Quick start
 
@@ -93,20 +89,19 @@ Python 3.11 or newer is required.
 python -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
+make check
 make dev
 ```
 
-Open `http://localhost:8000/` and choose an experiment.
+Open `http://localhost:8000/`.
 
 ## Local open-weight models
-
-Install the optional model stack:
 
 ```bash
 pip install -e '.[dev,models]'
 ```
 
-### FLUX.2 Klein 4B
+FLUX.2 Klein:
 
 ```bash
 ART_OPTIMIZER_MODEL=flux2-klein \
@@ -116,7 +111,7 @@ ART_OPTIMIZER_IMAGE_SIZE=1024 \
 python -m art_optimizer.app --host 127.0.0.1 --port 8000
 ```
 
-### Krea 2 Turbo
+Krea 2 Turbo:
 
 ```bash
 ART_OPTIMIZER_MODEL=krea2-turbo \
@@ -126,45 +121,20 @@ ART_OPTIMIZER_IMAGE_SIZE=1024 \
 python -m art_optimizer.app --host 127.0.0.1 --port 8000
 ```
 
-## Tests
+## Verification
+
+Hosted GitHub Actions is intentionally not part of this repository. The explicit local gate is:
 
 ```bash
-python -m ruff check .
-python -m compileall -q art_optimizer tests scripts
-python -m pytest
-for file in art_optimizer/static/*.js; do node --check "$file"; done
-node tests/js/test_concept_library.mjs
-node tests/js/test_emergent_tastes.mjs
-node tests/js/test_taste_gallery.mjs
+make check
 ```
 
 With a server running:
 
 ```bash
-python scripts/smoke_test.py http://localhost:8000
-```
-
-## API
-
-Core and catalog:
-
-```text
-GET  /
-GET  /healthz
-GET  /api/models
-GET  /api/ui-experiments
-GET  /ui/{experiment_id}
-```
-
-Emergent taste galleries:
-
-```text
-POST /api/emergent-tastes/sessions/{session_id}/tastes/{taste_id}/gallery
-GET  /api/emergent-tastes/sessions/{session_id}/galleries/{gallery_id}
-POST /api/emergent-tastes/sessions/{session_id}/galleries/{gallery_id}/cells/{cell_id}/activate
+make smoke
 ```
 
 ## License
 
-Art Optimizer code is licensed under the [MIT License](LICENSE). Model checkpoints,
-datasets, and generated-media obligations retain their own licenses.
+Art Optimizer code is MIT licensed. Model checkpoints, datasets, and generated-media obligations retain their own licenses.
