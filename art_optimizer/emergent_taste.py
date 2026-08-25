@@ -103,9 +103,12 @@ class EmergentTasteEngine:
                     raise ValueError(
                         f"observation {observation.observation_id} lacks {key} receipt"
                     )
-                log_scores[k] += math.log(
+                log_evidence = math.log(
                     max(float(observation.prediction_receipts[key]), 1e-12)
                 )
+                if observation.receipt_semantics == "legacy_probability":
+                    log_evidence *= observation.observation_weight
+                log_scores[k] += log_evidence
                 prediction_counts[k] += 1
         selected_k, scored_models = select_model(
             observation_count=len(observations),
