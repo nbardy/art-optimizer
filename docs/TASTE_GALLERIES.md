@@ -1,57 +1,33 @@
 # Seed-by-Strength Taste Galleries
 
-## Interaction
+## Geometry
 
-Clicking an exposed taste opens a grid:
+For taste center \(\theta_k\), strength \(s\), and row seed \(r\):
 
-```text
-rows      deterministic seeds
-columns   scalar taste strengths
-```
+\[
+a(s,k)=\operatorname{clip}(s\theta_k,-1,1),
+\qquad I_{r,s}=G(r,p,a(s,k)).
+\]
 
-The first row uses the current fixed-root seed. Additional row seeds are derived
-deterministically from the immutable gallery ID and a user-controlled seed nonce.
-`Shuffle seed rows` increments that nonce.
-
-## Strength definition
-
-For learned taste center `theta_k` and column strength `s`:
-
-```text
-a(s,k) = clip(s * theta_k, -1, 1)
-```
-
-The neutral action origin is therefore `s=0`, the fitted taste center is `s=1`, and
-larger values extrapolate until a coordinate reaches the renderer action bound.
-Cells disclose when clipping occurred.
-
-## Immutable manifest
-
-Each gallery event stores:
-
-- source session and taste;
-- taste center and digest;
-- representation-scope and configuration digests;
-- row seeds and strength columns;
-- every action vector;
-- rendered artifact identity and digest;
-- gallery and cell IDs;
-- explicit `preference_effect = none`.
-
-Repeated requests with the same gallery specification reuse deterministic renderer
-cache identities.
+Rows vary deterministic seeds. Columns vary only scalar strength. The first row uses the current world seed; other seeds are derived from the immutable gallery identity and shuffle nonce.
 
 ## Evidence boundary
 
-Gallery rendering, previewing, selecting, and seed shuffling never append
-`emergent_taste_choice_recorded` events. A grid deliberately changes seed and is not
-a qualified fixed-root choice slate.
+Generating, opening, previewing, or reshuffling a gallery creates no preference observation. A gallery changes seed and therefore is not a qualified fixed-root comparison slate.
 
-## Continuing from a cell
+Continuing from a cell creates a fresh fixed-root session at that exact seed and action with an empty latent-mode history.
 
-`Continue as new fixed-root session` creates a fresh session whose root is the
-selected cell's exact seed, action, and rendered artifact. The new session inherits
-the experiment configuration but starts with zero taste observations.
+## Execution
 
-This preserves provenance while preventing cross-seed browsing from being mistaken
-for evidence inside the original fixed-root taste projection.
+Gallery identity and cell render identities are deterministic. Rendering uses a bounded semaphore rather than launching the full grid without limit. Concurrent requests for one source session are serialized. If any cell fails, newly created successful cells from that request are cleaned up and the API returns an explicit operation error; pre-existing cache artifacts are preserved.
+
+## Manifest
+
+The immutable gallery event records:
+
+- source session and taste;
+- frozen center and digest;
+- model/renderer/codec/conditioning/basis scope;
+- row seeds and strengths;
+- each cell action, clipping state, artifact, and digest;
+- explicit `preference_effect = none`.

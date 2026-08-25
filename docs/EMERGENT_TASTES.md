@@ -1,95 +1,64 @@
 # Emergent Tastes Runtime Treatment
 
-**Status:** implemented experimental treatment  
 **Route:** `/ui/emergent-tastes`  
 **Treatment ID:** `emergent-tastes`
 
 ## Goal
 
-Test whether coherent preference modes can emerge naturally from repeated votes while the
-stochastic image root is fixed and candidate variance comes from the existing embedding/action
-controls.
+Test whether repeated fixed-root choices are better predicted by one or several latent action-preference modes while candidate generation remains the T0 control policy.
 
-This treatment deliberately holds the T0 candidate planner constant. It changes the command
-semantics, records self-contained fixed-root observations, and adds one replayable taste inference
-projection. The taste projection does not yet steer candidate generation.
+## Observation
 
-## Interaction contract
+Each qualified observation contains:
 
-| Action | Navigation | Legacy planner evidence | Emergent-taste evidence |
-|---|---|---:|---:|
-| choose candidate | move to the rendered candidate | full candidate win | full candidate win |
-| None fit | keep current image | weak anchor win | weak anchor win |
-| New directions | keep current image; widen action radius | none | none |
-| Resume from exemplar | restore an existing branch | restore historical branch state | none |
+- exact anchor and exposed alternatives;
+- action vectors and rendered design identities;
+- winner and evidence weight;
+- model/renderer/codec/conditioning/basis/prompt/seed scope;
+- result checkpoint;
+- predictions made before the outcome was learned.
 
-`New directions` calls the existing reroll transition with an empty exposure set. The world seed,
-prompt, renderer, and control basis remain unchanged.
+The event protocol is:
+
+```text
+emergent_taste_choice_pending
+    -> base command commits
+    -> emergent_taste_choice_recorded
+```
+
+On restart, a pending fact is finalized when the matching durable base event exists. Thus the preference fact is recoverable even if the process stops between the two writes.
 
 ## Model
 
-Each taste component has an ideal point \(\theta_k\) in the current action/control coordinates:
+For taste mode \(k\) with ideal point \(\theta_k\):
 
 \[
 u_k(a)=-\frac{\beta}{2}\lVert a-\theta_k\rVert^2.
 \]
 
-For one displayed slate, the component predicts the selected alternative with a softmax over the
-anchor and meaningfully exposed candidates.
+A multinomial softmax predicts the selected anchor/candidate. Hidden modes follow:
 
-The runtime fits one-, two-, and three-component models. Components have a fixed persistence term,
-so a coherent run of votes is more likely to remain in one taste than to switch on every click.
-This is a small sticky hidden-state mixture rather than a manually managed taste shelf.
+\[
+P(z_t=j\mid z_{t-1}=i)
+=\rho\mathbf 1[i=j]+(1-\rho)\frac1K.
+\]
 
-Before every vote, every candidate model emits a predictive probability. That receipt is stored in
-the immutable `emergent_taste_choice_recorded` event before the vote is used for refitting. Model
-selection uses cumulative chronological log score with a structural penalty and minimum evidence
-mass. A second or third taste therefore appears only when it predicts later votes better than a
-simpler model.
+The prevalence is intentionally uniform in this baseline. Normalized state occupancies are not used as a false M-step for the sticky transition model.
 
-## Persistence and replay
+An observation with weight \(\omega_t\) contributes the power likelihood:
 
-Taste observations are self-contained session events containing:
+\[
+p(y_t\mid z_t=k)^{\omega_t}.
+\]
 
-- exact anchor and exposed alternatives;
-- action vectors and rendered design IDs;
-- fixed world seed and control-basis revision;
-- winner and observation weight;
-- result branch checkpoint;
-- before-outcome predictive receipts.
+The same quantity is used in fitting and chronological model scoring. EM convergence is evaluated after recomputing likelihood under the newly updated centers. Old stored sessions retain their original prequential receipt semantics during replay.
 
-The projection is rebuilt deterministically from these events after restart. Cached projections are
-operational accelerators only.
+Models with one, two, and three modes are scored before each vote. Additional modes require enough evidence, convergence, and penalized chronological improvement.
 
-## UI pattern
+## Interpretation
 
-The right rail is a projection of discovered modes, not a mode-management form.
+A displayed Taste A/B/C is a coherent region of action-choice behavior. Images are exemplars attached to that inferred mode. The runtime does not yet infer a visual attribute from image embeddings or prove cross-prompt transfer.
 
-- Taste A/B/C appear automatically.
-- Each mode shows evidence mass and recent representative winners.
-- `Resume from exemplar` restores a real historical branch without adding another vote.
-- The live scoreboard exposes whether one-, two-, or three-taste explanations are active, testing,
-  or still under-supported.
+## Candidate policy
 
-The UI intentionally does not invent semantic attribute names. A taste is a preferred region, not a
-claim that a causal visual attribute has been extracted.
-
-## Explicit boundary
-
-Implemented here:
-
-- fixed-root embedding/action evidence;
-- truthful neutral exploration versus anchor rejection;
-- sticky ideal-point mixture;
-- before-outcome receipts and chronological model selection;
-- deterministic replay;
-- automatic taste cards and exemplar resume UX.
-
-Not implemented here:
-
-- learned reusable embedding directions;
-- visual-attribute extraction;
-- image-embedding clustering;
-- taste-authoritative candidate planning;
-- parent-conditioned image evolution;
-- cross-prompt or cross-control-basis transport.
+The legacy T0 planner remains authoritative in this treatment. This isolates the latent-mode inference/UX question from planner replacement. A separate future treatment may test taste-authoritative planning after representation validation.
