@@ -66,9 +66,17 @@ class TasteGalleryService:
                 request.request_id,
             )
             if existing is not None:
-                return public_gallery(
-                    TasteGalleryManifest.model_validate(existing["payload"])
-                )
+                manifest = TasteGalleryManifest.model_validate(existing["payload"])
+                if (
+                    manifest.taste_id != taste_id
+                    or manifest.row_count != request.row_count
+                    or manifest.strengths != request.strengths
+                    or manifest.seed_nonce != request.seed_nonce
+                ):
+                    raise ConflictError(
+                        "request_id was already used for a different gallery"
+                    )
+                return public_gallery(manifest)
 
             snapshot = await self.emergent.get_snapshot(session_id)
             self._validate_expected_mutation(snapshot, request)
@@ -182,8 +190,16 @@ class TasteGalleryService:
                 payload.request_id,
             )
             if existing is not None:
+                recorded = existing["payload"]
+                if (
+                    recorded.get("gallery_id") != gallery_id_value
+                    or recorded.get("cell_id") != cell_id
+                ):
+                    raise ConflictError(
+                        "request_id was already used for a different gallery cell"
+                    )
                 return await self.emergent.get_snapshot(
-                    str(existing["payload"]["new_session_id"])
+                    str(recorded["new_session_id"])
                 )
 
             source = await self.service.get_snapshot(session_id)
