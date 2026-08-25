@@ -49,6 +49,7 @@ class TasteChoiceObservation(ContractModel):
     created_at: str
     observation_weight: float = Field(default=1.0, gt=0.0, le=1.0)
     prediction_receipts: dict[str, float] = Field(default_factory=dict)
+    receipt_semantics: str = "legacy_probability"
 
     @model_validator(mode="after")
     def validate_slate(self) -> Self:
@@ -63,6 +64,11 @@ class TasteChoiceObservation(ContractModel):
         for key, evidence in self.prediction_receipts.items():
             if not key.startswith("k=") or not 0.0 < float(evidence) <= 1.0:
                 raise ValueError("prediction receipts must be named evidence values in (0, 1]")
+        if self.receipt_semantics not in {
+            "legacy_probability",
+            "power_evidence_v1",
+        }:
+            raise ValueError("unknown prediction receipt semantics")
         if not self.representation_scope_id:
             scope_id = self.representation_scope.get("scope_id")
             self.representation_scope_id = (
