@@ -82,6 +82,11 @@ class DirectionLabService:
                 "Direction Lab requires embedding conditioning; prompt-string conditioning "
                 "cannot execute non-string random points."
             )
+        render_slate = getattr(self.renderer, "render_embedding_slate", None)
+        if render_slate is None:
+            raise ConflictError(
+                "The active renderer does not implement random embedding slates."
+            )
 
         steps = [item.as_step() for item in request.center_path]
         digest = embedding_walk_digest(
@@ -96,7 +101,7 @@ class DirectionLabService:
         design_ids = [f"direction_{digest[:24]}_{index + 1}" for index in range(4)]
         try:
             rendered = await asyncio.to_thread(
-                self.renderer.render_embedding_slate,
+                render_slate,
                 design_ids=design_ids,
                 image_seed=request.image_seed,
                 prompt=request.prompt,
@@ -105,7 +110,7 @@ class DirectionLabService:
                 radius=request.radius,
                 center_steps=steps,
             )
-        except (TypeError, AttributeError, NotImplementedError) as error:
+        except NotImplementedError as error:
             raise ConflictError(
                 "The active renderer does not implement random embedding slates."
             ) from error
