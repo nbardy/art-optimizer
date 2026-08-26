@@ -45,7 +45,7 @@
 
             <div class="radius-heading">
               <label for="direction-radius">Embedding shell radius</label>
-              <output id="radius-output">0.40× base RMS</output>
+              <output id="radius-output">0.40× active base RMS</output>
             </div>
             <input
               id="direction-radius"
@@ -57,8 +57,9 @@
               value="0.40"
             />
             <p class="control-note">
-              This is direct conditioning displacement. The old first-round local
-              movement was roughly 0.05× base RMS; 0.40 is about eight times larger.
+              Radius is measured from the final prompt-embedding tensor over elements the
+              model actually consumes. It is a measured scalar, not a learned norm; padded
+              or masked tokens receive no perturbation energy.
             </p>
 
             <fieldset>
@@ -83,7 +84,7 @@
           <div class="experiment-invariants">
             <span>FIXED</span><strong>prompt · diffusion seed · model · renderer</strong>
             <span>VARIED</span><strong>raw prompt-embedding point only</strong>
-            <span>RADIAL</span><strong>exact nonzero RMS shell</strong>
+            <span>RADIAL</span><strong>exact nonzero active-element RMS shell</strong>
           </div>
         </aside>
 
@@ -114,6 +115,8 @@
               <div><span>center offset</span><strong>—</strong></div>
               <div><span>minimum pairwise separation</span><strong>—</strong></div>
               <div><span>direction effective rank</span><strong>—</strong></div>
+              <div><span>active embedding elements</span><strong>—</strong></div>
+              <div><span>RMS metric</span><strong>—</strong></div>
               <div><span>string axes</span><strong>never</strong></div>
             </div>
             <details>
