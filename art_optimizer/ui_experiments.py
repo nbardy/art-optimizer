@@ -92,7 +92,13 @@ def get_ui_experiment(experiment_id: str) -> UIExperiment:
 
 
 def validate_ui_files(static_dir: Path) -> None:
-    required = ["experiments.html", "experiments.js", "experiments.css"]
+    required = [
+        "experiments.html",
+        "experiments.js",
+        "experiments.css",
+        "direction_lab.js",
+        "direction_lab.css",
+    ]
     required.extend(item.filename for item in _EXPERIMENTS.values())
     missing = [filename for filename in required if not (static_dir / filename).is_file()]
     if missing:
