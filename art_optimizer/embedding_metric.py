@@ -53,12 +53,6 @@ def active_candidate_offsets(
     mask = np.asarray(active_mask, dtype=bool)
     if mask.shape != normalized_shape:
         raise ValueError("active embedding mask does not match embedding shape")
-    active_count = int(mask.sum())
-    minimum = 5 if codec_id == "orthogonal-shell" else 4
-    if active_count < minimum:
-        raise ValueError(
-            f"{codec_id} requires at least {minimum} active embedding elements"
-        )
 
     center = np.zeros(normalized_shape, dtype=np.float64)
     for step in center_steps:
@@ -86,6 +80,7 @@ def active_candidate_offsets(
     )
     points = center[None, ...] + float(radius) * directions
 
+    active_count = int(mask.sum())
     compressed_directions = directions.reshape(4, -1)[:, mask.reshape(-1)]
     compressed_points = points.reshape(4, -1)[:, mask.reshape(-1)]
     diagnostics = direction_diagnostics(
@@ -118,6 +113,12 @@ def active_shell_directions(
     mask = np.asarray(active_mask, dtype=bool)
     if mask.shape != normalized_shape:
         raise ValueError("active embedding mask does not match embedding shape")
+    active_count = int(mask.sum())
+    minimum = 5 if codec_id == "orthogonal-shell" else 4
+    if active_count < minimum:
+        raise ValueError(
+            f"{codec_id} requires at least {minimum} active embedding elements"
+        )
 
     raw = sample_unit_shell_directions(
         normalized_shape,
@@ -183,6 +184,9 @@ def _to_numpy(value: Any) -> np.ndarray:
     detach = getattr(value, "detach", None)
     if callable(detach):
         tensor = detach()
+        floating = getattr(tensor, "float", None)
+        if callable(floating):
+            tensor = floating()
         cpu = getattr(tensor, "cpu", None)
         if callable(cpu):
             tensor = cpu()
