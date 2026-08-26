@@ -1,11 +1,13 @@
 import { formatRequestError } from "./experiment_core.js";
 
 const STORAGE_KEY = "artOptimizerDirectionLab/v1";
-const MAX_SEED = Number.MAX_SAFE_INTEGER;
-
 export function nextPointSeed(seed) {
-  const value = Number.isFinite(Number(seed)) ? Math.trunc(Number(seed)) : 0;
-  return (value * 6364136223846793 + 1442695040888963) % MAX_SEED;
+  let value = Number.isFinite(Number(seed)) ? Number(seed) >>> 0 : 0x9e3779b9;
+  if (value === 0) value = 0x9e3779b9;
+  value ^= value << 13;
+  value ^= value >>> 17;
+  value ^= value << 5;
+  return value >>> 0;
 }
 
 export function appendCenterStep(path, step) {
@@ -30,6 +32,7 @@ function readState() {
       codecId: parsed.codecId || "orthogonal-shell",
       radius: Number.isFinite(Number(parsed.radius)) ? Number(parsed.radius) : 0.4,
       centerPath: Array.isArray(parsed.centerPath) ? parsed.centerPath : [],
+      modelId: parsed.modelId || null,
     };
   } catch {
     return {
@@ -39,6 +42,7 @@ function readState() {
       codecId: "orthogonal-shell",
       radius: 0.4,
       centerPath: [],
+      modelId: null,
     };
   }
 }
@@ -87,6 +91,7 @@ function boot() {
         codecId: state.codecId,
         radius: state.radius,
         centerPath: state.centerPath,
+        modelId: state.modelId,
       }),
     );
   }
@@ -144,8 +149,16 @@ function boot() {
   }
 
   function readInputs() {
-    state.prompt = elements.prompt.value.trim();
-    state.imageSeed = Math.max(0, Math.trunc(Number(elements.imageSeed.value)));
+    const prompt = elements.prompt.value.trim();
+    const imageSeed = Math.max(0, Math.trunc(Number(elements.imageSeed.value)));
+    if (state.centerPath.length && (prompt !== state.prompt || imageSeed !== state.imageSeed)) {
+      state.centerPath = [];
+      state.selectedCell = null;
+      elements.status.textContent =
+        "Prompt or diffusion seed changed, so the embedding walk was reset to its center.";
+    }
+    state.prompt = prompt;
+    state.imageSeed = imageSeed;
     state.pointSeed = Math.max(0, Math.trunc(Number(elements.pointSeed.value)));
     state.radius = Number(elements.radius.value);
     state.codecId =
@@ -337,6 +350,12 @@ function boot() {
       }
       renderCodecs();
       syncInputs();
+      if (state.modelId && state.modelId !== health.model) {
+        state.centerPath = [];
+        state.selectedCell = null;
+      }
+      state.modelId = health.model;
+      saveState();
       const supported =
         health.conditioning_mode === "embedding" &&
         health.model !== "procedural";
