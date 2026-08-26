@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#08090b" />
+    <title>Art Optimizer — Random Direction Lab</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/direction_lab.css" />
+  </head>
+  <body>
+    <main class="direction-shell">
+      <header class="direction-header">
+        <div>
+          <p class="eyebrow">Fixed-seed non-string embedding experiment</p>
+          <h1>Random Direction Lab</h1>
+          <p>
+            Every candidate uses the same diffusion seed. The four codecs place
+            prompt embeddings directly on a declared nonzero shell—never near the center,
+            never through “color / composition / realism” strings.
+          </p>
+        </div>
+        <div class="header-actions">
+          <span id="model-badge" class="model-badge">checking model…</span>
+          <a href="/">All experiments</a>
+        </div>
+      </header>
+
+      <section class="direction-layout">
+        <aside class="direction-controls">
+          <form id="direction-form">
+            <label for="direction-prompt">Base prompt</label>
+            <textarea id="direction-prompt" rows="4">an evolving impossible garden</textarea>
+
+            <div class="seed-grid">
+              <label>
+                Diffusion seed
+                <input id="image-seed" type="number" min="0" step="1" value="424242" />
+              </label>
+              <label>
+                Point seed
+                <input id="point-seed" type="number" min="0" step="1" value="1001" />
+              </label>
+            </div>
+
+            <div class="radius-heading">
+              <label for="direction-radius">Embedding shell radius</label>
+              <output id="radius-output">0.40× base RMS</output>
+            </div>
+            <input
+              id="direction-radius"
+              class="radius-slider"
+              type="range"
+              min="0.05"
+              max="1.25"
+              step="0.05"
+              value="0.40"
+            />
+            <p class="control-note">
+              This is direct conditioning displacement. The old first-round local
+              movement was roughly 0.05× base RMS; 0.40 is about eight times larger.
+            </p>
+
+            <fieldset>
+              <legend>Choose one point codec</legend>
+              <div id="codec-list" class="codec-list"></div>
+            </fieldset>
+
+            <button id="generate-slate" class="primary-button" type="submit">
+              Generate four shell points
+            </button>
+          </form>
+
+          <div class="walk-controls">
+            <button id="explore-selected" type="button" disabled>
+              Use selected point as center
+            </button>
+            <button id="new-points" type="button">New random points</button>
+            <button id="step-back" type="button" disabled>Step back</button>
+            <button id="reset-center" type="button" disabled>Reset center</button>
+          </div>
+
+          <div class="experiment-invariants">
+            <span>FIXED</span><strong>prompt · diffusion seed · model · renderer</strong>
+            <span>VARIED</span><strong>raw prompt-embedding point only</strong>
+            <span>RADIAL</span><strong>exact nonzero RMS shell</strong>
+          </div>
+        </aside>
+
+        <section class="direction-results">
+          <div class="results-toolbar">
+            <div>
+              <p class="eyebrow">Current center</p>
+              <h2 id="center-label">Prompt center</h2>
+            </div>
+            <div id="walk-path" class="walk-path">depth 0</div>
+          </div>
+
+          <div id="direction-status" class="direction-status">
+            Select a codec and generate the first four points.
+          </div>
+
+          <div id="direction-grid" class="direction-grid" aria-live="polite"></div>
+
+          <section class="diagnostics-panel">
+            <header>
+              <div>
+                <p class="eyebrow">Pre-render geometry receipt</p>
+                <h2>What variance did we actually request?</h2>
+              </div>
+              <span id="slate-id" class="muted"></span>
+            </header>
+            <div id="diagnostics" class="diagnostics-grid">
+              <div><span>center offset</span><strong>—</strong></div>
+              <div><span>minimum pairwise separation</span><strong>—</strong></div>
+              <div><span>direction effective rank</span><strong>—</strong></div>
+              <div><span>string axes</span><strong>never</strong></div>
+            </div>
+            <details>
+              <summary>Direction cosine matrix</summary>
+              <pre id="cosine-matrix">Generate a slate to inspect it.</pre>
+            </details>
+          </section>
+        </section>
+      </section>
+
+      <div id="direction-loading" class="direction-loading hidden" role="status">
+        <div class="loading-orbit"></div>
+        <strong>Rendering four fixed-seed embedding points…</strong>
+        <span>Large random shell probes can be weird. That is the experiment.</span>
+      </div>
+
+      <div id="direction-toast" class="direction-toast hidden" role="status"></div>
+    </main>
+
+    <script type="module" src="/static/direction_lab.js"></script>
+  </body>
+</html>
