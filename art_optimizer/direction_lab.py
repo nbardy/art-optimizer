@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Self
 
 from pydantic import Field, field_validator, model_validator
@@ -66,6 +66,7 @@ class DirectionSlateRequest(ContractModel):
 @dataclass(slots=True)
 class DirectionLabService:
     renderer: Any
+    _render_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     def catalog(self) -> list[dict[str, object]]:
         return random_embedding_codec_catalog()
@@ -100,16 +101,17 @@ class DirectionLabService:
         slate_id = f"direction_slate_{digest[:24]}"
         design_ids = [f"direction_{digest[:24]}_{index + 1}" for index in range(4)]
         try:
-            rendered = await asyncio.to_thread(
-                render_slate,
-                design_ids=design_ids,
-                image_seed=request.image_seed,
-                prompt=request.prompt,
-                codec_id=request.codec_id,
-                point_seed=request.point_seed,
-                radius=request.radius,
-                center_steps=steps,
-            )
+            async with self._render_lock:
+                rendered = await asyncio.to_thread(
+                    render_slate,
+                    design_ids=design_ids,
+                    image_seed=request.image_seed,
+                    prompt=request.prompt,
+                    codec_id=request.codec_id,
+                    point_seed=request.point_seed,
+                    radius=request.radius,
+                    center_steps=steps,
+                )
         except NotImplementedError as error:
             raise ConflictError(
                 "The active renderer does not implement random embedding slates."
