@@ -54,8 +54,11 @@ def active_candidate_offsets(
     if mask.shape != normalized_shape:
         raise ValueError("active embedding mask does not match embedding shape")
     active_count = int(mask.sum())
-    if active_count < 4:
-        raise ValueError("fewer than four active embedding elements are available")
+    minimum = 5 if codec_id == "orthogonal-shell" else 4
+    if active_count < minimum:
+        raise ValueError(
+            f"{codec_id} requires at least {minimum} active embedding elements"
+        )
 
     center = np.zeros(normalized_shape, dtype=np.float64)
     for step in center_steps:
@@ -125,7 +128,7 @@ def active_shell_directions(
     active = flat[:, mask.reshape(-1)].copy()
 
     if codec_id == "orthogonal-shell":
-        active -= active.mean(axis=0, keepdims=True)
+        active -= active.mean(axis=1, keepdims=True)
         q, _ = np.linalg.qr(active.T, mode="reduced")
         active = q.T
     elif codec_id == "antipodal-shell":
