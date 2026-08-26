@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Any, Self
 
@@ -90,7 +92,7 @@ class DirectionLabService:
             )
 
         steps = [item.as_step() for item in request.center_path]
-        digest = embedding_walk_digest(
+        walk_digest = embedding_walk_digest(
             prompt=request.prompt,
             image_seed=request.image_seed,
             codec_id=request.codec_id,
@@ -98,6 +100,16 @@ class DirectionLabService:
             radius=request.radius,
             center_steps=steps,
         )
+        scope = {
+            "schema": "random-direction-scope/v1",
+            "model_id": capabilities.model_id,
+            "renderer_revision": capabilities.renderer_revision,
+            "codec_revision": capabilities.codec_revision,
+            "conditioning_mode": capabilities.conditioning_mode,
+        }
+        scope_json = json.dumps(scope, sort_keys=True, separators=(",", ":"))
+        scope_id = f"random-direction-scope/v1:{hashlib.sha256(scope_json.encode()).hexdigest()}"
+        digest = hashlib.sha256(f"{scope_id}:{walk_digest}".encode()).hexdigest()
         slate_id = f"direction_slate_{digest[:24]}"
         design_ids = [f"direction_{digest[:24]}_{index + 1}" for index in range(4)]
         try:
@@ -143,6 +155,8 @@ class DirectionLabService:
         return {
             "schema": "direction-lab-slate/v1",
             "slate_id": slate_id,
+            "representation_scope_id": scope_id,
+            "representation_scope": scope,
             "codec": profile.public_metadata(),
             "model_id": capabilities.model_id,
             "renderer_revision": capabilities.renderer_revision,
