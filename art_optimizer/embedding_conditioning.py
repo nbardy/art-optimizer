@@ -74,6 +74,22 @@ def get_conditioning_adapter(pipeline_class: str) -> ConditioningAdapter:
     return adapter
 
 
+def encode_base_prompt(
+    pipeline: Any,
+    request: CompiledModelRequest,
+) -> EncodedPrompt:
+    """Encode only the prompt center used by non-string embedding codecs."""
+
+    if request.pipeline_class is None:
+        raise ValueError("embedding conditioning requires a model pipeline")
+    adapter = get_conditioning_adapter(request.pipeline_class)
+    encoded = adapter.encode(pipeline, [request.base_prompt])
+    return EncodedPrompt(
+        embeddings=encoded.embeddings[0:1],
+        mask=adapter.output_mask(encoded.mask),
+    )
+
+
 def build_direction_bank(
     pipeline: Any,
     request: CompiledModelRequest,
@@ -121,6 +137,42 @@ def apply_direction_bank(
         mixed = mixed + direction * (float(value) * scale)
     adapter = get_conditioning_adapter(request.pipeline_class)
     return adapter.pipeline_kwargs(EncodedPrompt(embeddings=mixed, mask=bank.base.mask))
+
+
+def apply_relative_rms_offset(
+    request: CompiledModelRequest,
+    base: EncodedPrompt,
+    offset: np.ndarray,
+    torch_module: Any,
+) -> tuple[dict[str, Any], float]:
+    """Add an exact offset measured in units of the base embedding RMS."""
+
+    if request.pipeline_class is None:
+        raise ValueError("embedding conditioning requires a model pipeline")
+    expected_shape = tuple(int(item) for item in base.embeddings.shape[1:])
+    values = np.asarray(offset, dtype=np.float32)
+    if values.shape != expected_shape:
+        raise ValueError(
+            f"embedding offset shape {values.shape} does not match {expected_shape}"
+        )
+    if not np.isfinite(values).all():
+        raise ValueError("embedding offset must be finite")
+
+    base_rms_tensor = base.embeddings.float().square().mean().sqrt().clamp_min(1e-6)
+    base_rms = float(base_rms_tensor.item())
+    tensor = torch_module.as_tensor(
+        values,
+        device=base.embeddings.device,
+        dtype=base.embeddings.dtype,
+    )
+    mixed = base.embeddings + tensor.unsqueeze(0) * base_rms_tensor.to(
+        dtype=base.embeddings.dtype
+    )
+    adapter = get_conditioning_adapter(request.pipeline_class)
+    return (
+        adapter.pipeline_kwargs(EncodedPrompt(embeddings=mixed, mask=base.mask)),
+        base_rms,
+    )
 
 
 def _match_rms(direction: Any, base: Any) -> Any:
