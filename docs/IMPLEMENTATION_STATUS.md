@@ -1,93 +1,130 @@
 # Implementation Status
 
-**Status:** runnable v0.3 research implementation  
-**Last updated:** 2026-08-21
+**Status:** runnable v0.6 research implementation  
+**Last updated:** 2026-08-26
 
-## Complete interaction and learning loop
+## Runnable experiments
 
-The repository executes the complete browser-to-renderer loop:
+One server exposes six stable interfaces from the root experiment catalog:
 
 ```text
-create world
+/ui/current-image
+/ui/implicit-lanes
+/ui/concept-shelf
+/ui/lane-board
+/ui/emergent-tastes
+/ui/direction-lab
+```
+
+The first four are presentation variants over the original authored-axis T0 search. `emergent-tastes` adds replayable latent action-preference modes and read-only taste galleries. `direction-lab` is a separate generator-facing experiment over direct non-string prompt-embedding points.
+
+## Original authored-axis loop
+
+The repository executes the browser-to-renderer loop:
+
+```text
+create fixed-root world
 → render committed root
-→ plan four role-balanced descendants
-→ stream each candidate independently
-→ preview without mutating state
-→ commit one candidate or reroll to the anchor
-→ update the branch-local posterior
-→ favorite into persistent taste memory
-→ start a new world without forgetting taste
-→ restore and fork from recent branch checkpoints
+→ plan four authored-action candidates
+→ stream candidates
+→ preview without mutation
+→ choose or reject
+→ update branch-local posterior
+→ persist exact branch checkpoints and choice facts
+→ restore and fork
 ```
 
 The CPU procedural renderer remains the deterministic reference used by ordinary tests and UI development.
 
+## Direct random embedding points
+
+Direction Lab bypasses the eight positive/negative prompt-axis strings. It encodes only the base prompt and adds direct embedding-tensor offsets measured in units of base-prompt RMS.
+
+Four implementations are selectable:
+
+- independent full-tensor Gaussian shell;
+- exactly orthogonal full-tensor shell;
+- structured rank-4 token-by-channel shell;
+- antipodal `+u,-u,+v,-v` shell.
+
+Every four-image slate shares one diffusion seed. Every direction is normalized to exact unit RMS, so shell radius directly specifies conditioning displacement. Selecting a candidate appends its exact deterministic step and makes that embedding point the next center. The API returns pre-render geometry receipts including pairwise RMS spacing, direction cosines, and effective rank.
+
+See [`RANDOM_EMBEDDING_CODECS.md`](RANDOM_EMBEDDING_CODECS.md).
+
 ## Local real-model stacks
 
-Two local/open-weight targets are implemented behind the same model profile, semantic codec, renderer, persistence, and UI contracts:
+Two local/open-weight targets are implemented:
 
 - `flux2-klein` — `black-forest-labs/FLUX.2-klein-4B` through `Flux2KleinPipeline`;
 - `krea2-turbo` — `krea/Krea-2-Turbo` through `Krea2Pipeline`.
 
 No hosted generation API is used. Model dependencies are optional and weights load lazily. The selected model is fixed for one server process so only one large checkpoint occupies GPU memory.
 
-## Embedding-level controls
+FLUX consumes `prompt_embeds`; Krea consumes `prompt_embeds` and its mask. `ART_OPTIMIZER_CONDITIONING_MODE=prompt` remains an authored prompt-compilation baseline, but Direction Lab intentionally refuses to run outside embedding mode.
 
-The default real-model codec operates directly on the model text-embedding surface. For each fixed world prompt it encodes one batched set containing the base prompt and positive/negative endpoints for eight semantic axes, builds RMS-normalized directions, and mixes them by the optimizer's canonical action vector.
+## Correctness and replay hardening
 
-FLUX and Krea differ only in small conditioning adapters:
+Implemented runtime guarantees include:
 
-- FLUX consumes `prompt_embeds`;
-- Krea consumes `prompt_embeds` plus `prompt_embeds_mask`.
-
-`ART_OPTIMIZER_CONDITIONING_MODE=prompt` preserves an ordinary prompt-compilation baseline for controlled comparisons.
-
-## Renderer and replay hardening
-
-- explicit pipeline classes rather than generic pipeline guessing;
-- one data-driven model registry with license and deployment metadata;
-- fail-fast local-model dependency checks;
-- optional model revision pinning;
+- request-id idempotency and payload conflict checks;
+- restorable same-design checkpoints after preference-bearing rejection;
+- pending/final recovery for emergent choice facts;
+- complete model/prompt/seed/basis scopes for learned observations;
+- consistent weak-evidence likelihood semantics;
+- convergence-gated finite sticky ideal-point modes;
 - atomic image and manifest writes;
-- cached images reused only when the complete render-request digest matches;
-- model-specific runtime directories prevent cross-model session or artifact repair;
-- active model, codec, conditioning mode, basis, replay level, and license reported by `/healthz`;
-- full catalog reported by `/api/models`.
+- complete render-request cache digests;
+- bounded taste-gallery concurrency and partial-failure cleanup;
+- serialized Direction Lab GPU slates;
+- deterministic point and image seeds;
+- model-specific runtime directories.
 
-## Modular experiment boundaries
+## Modular boundaries
 
-- renderer/model selection is composed in `composition.py`;
-- model semantics and licenses live in `model_codec.py`;
-- tensor-signature differences live in `embedding_conditioning.py`;
-- acquisition lives in `planner.py`;
-- local preference learning lives in `preference.py`;
-- persistent memory lives in `atlas.py`;
-- alternate browser builds can be selected with `ART_OPTIMIZER_STATIC_DIR` and use the same HTTP/SSE API.
+- model profiles and authored endpoint prompts: `model_codec.py`;
+- base prompt and conditioning tensor operations: `embedding_conditioning.py`;
+- direct shell geometry and replayable embedding walks: `random_embedding_codec.py`;
+- random slate API orchestration: `direction_lab.py`;
+- Diffusers execution and artifact caching: `diffusers_renderer.py`;
+- authored acquisition: `planner.py`;
+- preference inference: `preference.py`, `taste_math.py`, and related typed modules;
+- persistent memory: `atlas.py`;
+- state machine and persistence: `service.py` and `event_store.py`.
 
-The preference learner is isolated but still selected concretely by the current service. A future learner registry is a small composition-root extension, not a cross-cutting model or UI rewrite.
+## GPU-free validation
 
-## Validation completed without model weights
+The local verification path covers:
 
-The normal test path remains GPU-free. It covers the procedural renderer, service state machine, optimizer, atlas, persistence, API, UI syntax, and fake-pipeline tests for both FLUX and Krea codecs. The fake-pipeline tests verify batched endpoint encoding, Krea masks, embedding application, model metadata, and cache invalidation.
+- procedural renderer and service state machine;
+- persistence and command recovery;
+- authored optimizer and atlas;
+- emergent-taste mathematics;
+- taste galleries;
+- all UI routes and browser helper contracts;
+- deterministic shell geometry for all four random codecs;
+- exact orthogonal and antipodal invariants;
+- low-rank matrix rank;
+- fake-pipeline fixed-seed direct-embedding rendering and cache reuse.
 
 ## Empirical gates still open
 
-The code path is ready to run on a GPU node, but the real checkpoints were not downloaded or benchmarked in the implementation environment. Before either becomes the default, run:
+The implementation can control requested embedding variance exactly, but real FLUX/Krea image response remains empirical. The immediate test matrix is:
 
-- a real root and four-candidate smoke session;
-- coordinate sweeps for all eight dimensions;
-- cross-seed and cross-prompt smoothness tests;
-- within-slate diversity and preservation measurements;
-- VRAM and batch-of-four latency receipts;
-- human comparison against prompt-only and random baselines;
-- Krea deployment-license and content-filter review.
+- four random codecs;
+- matched radii from `0.10` to `0.80` base RMS;
+- several prompts and point seeds;
+- fixed diffusion seed within each comparison;
+- usefulness, breakage, common-mode collapse, and subject-preservation judgments;
+- latency and VRAM receipts.
 
-## Deferred product infrastructure
+Do not promote a codec because it merely produces larger changes. It must produce useful decisions at a tolerable broken/off-manifold rate.
 
+## Deferred research and production work
+
+- preference learning over a winning random basis;
+- held-out reusable-direction extraction;
+- parent-conditioned image evolution;
 - authentication, TLS, and multi-user isolation;
-- reference-image upload and atlas exemplar conditioning;
-- export/provenance bundles;
 - production GPU scheduling and object storage;
-- collaborative preference learning;
-- learned attention or adapter directions;
-- offline LoRA/DPO consolidation.
+- export/provenance bundles;
+- Krea deployment-license and content-filter review.

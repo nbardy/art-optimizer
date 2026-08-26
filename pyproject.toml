@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "art-optimizer"
-version = "0.5.0"
+version = "0.6.0"
 description = "Human-in-the-loop generative art exploration with preference experiments"
 readme = "README.md"
 requires-python = ">=3.11"

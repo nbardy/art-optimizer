@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .composition import build_service
 from .config import Settings
+from .direction_lab import DirectionLabService, DirectionSlateRequest
 from .domain import (
     CommitPayload,
     CreateSessionRequest,
@@ -45,6 +46,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     service = build_service(settings)
     emergent_tastes = EmergentTasteExperiment(service)
     taste_galleries = TasteGalleryService(service, emergent_tastes)
+    direction_lab = DirectionLabService(service.renderer)
     default_static_dir = Path(__file__).with_name("static").resolve()
     static_dir = Path(
         os.environ.get("ART_OPTIMIZER_STATIC_DIR", str(default_static_dir))
@@ -67,10 +69,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await service.shutdown()
 
-    app = FastAPI(title="Art Optimizer", version="0.5.0", lifespan=lifespan)
+    app = FastAPI(title="Art Optimizer", version="0.6.0", lifespan=lifespan)
     app.state.service = service
     app.state.emergent_tastes = emergent_tastes
     app.state.taste_galleries = taste_galleries
+    app.state.direction_lab = direction_lab
     app.mount("/assets", StaticFiles(directory=settings.artifacts_dir), name="assets")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -122,7 +125,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "license_id": capabilities.license_id,
             "license_url": capabilities.license_url,
             "ui": active_ui_id,
-            "treatments": ["t0-controlled-search", "emergent-tastes"],
+            "treatments": [
+                "t0-controlled-search",
+                "emergent-tastes",
+                "random-direction-lab",
+            ],
             "data_dir": str(settings.data_dir),
         }
 
@@ -133,6 +140,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/ui-experiments")
     async def ui_experiments() -> list[dict[str, str]]:
         return ui_catalog()
+
+    @app.get("/api/direction-codecs")
+    async def direction_codecs() -> list[dict[str, object]]:
+        return direction_lab.catalog()
+
+    @app.post("/api/direction-lab/slates")
+    async def generate_direction_slate(
+        request: DirectionSlateRequest,
+    ) -> dict[str, object]:
+        return await direction_lab.generate(request)
 
     @app.post("/api/sessions")
     async def create_session(request: CreateSessionRequest) -> dict[str, object]:

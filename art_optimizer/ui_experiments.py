@@ -58,12 +58,23 @@ _EXPERIMENTS = {
         experiment_id="emergent-tastes",
         label="Emergent tastes",
         description=(
-            "Fixed-root embedding search with chronologically tested latent taste modes "
+            "Fixed-root authored-axis search with chronologically tested latent taste modes "
             "and seed-by-strength taste galleries."
         ),
         filename="emergent.html",
         treatment_id="emergent-tastes",
         concept_controls="emergent",
+    ),
+    "direction-lab": UIExperiment(
+        experiment_id="direction-lab",
+        label="Random Direction Lab",
+        description=(
+            "Four non-string embedding point codecs on an explicit RMS shell, with a fixed "
+            "diffusion seed and an iterative choose-the-new-center workflow."
+        ),
+        filename="direction_lab.html",
+        treatment_id="random-direction-lab",
+        concept_controls="none",
     ),
 }
 
@@ -81,7 +92,13 @@ def get_ui_experiment(experiment_id: str) -> UIExperiment:
 
 
 def validate_ui_files(static_dir: Path) -> None:
-    required = ["experiments.html", "experiments.js", "experiments.css"]
+    required = [
+        "experiments.html",
+        "experiments.js",
+        "experiments.css",
+        "direction_lab.js",
+        "direction_lab.css",
+    ]
     required.extend(item.filename for item in _EXPERIMENTS.values())
     missing = [filename for filename in required if not (static_dir / filename).is_file()]
     if missing:

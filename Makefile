@@ -17,6 +17,7 @@ browser:
 	node tests/js/test_concept_library.mjs
 	node tests/js/test_emergent_tastes.mjs
 	node tests/js/test_taste_gallery.mjs
+	node tests/js/test_direction_lab.mjs
 
 check: lint browser test
 
