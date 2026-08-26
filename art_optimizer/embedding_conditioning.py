@@ -144,8 +144,16 @@ def apply_relative_rms_offset(
     base: EncodedPrompt,
     offset: np.ndarray,
     torch_module: Any,
+    *,
+    active_mask: np.ndarray | None = None,
+    base_rms: float | None = None,
 ) -> tuple[dict[str, Any], float]:
-    """Add an exact offset measured in units of the base embedding RMS."""
+    """Add an offset measured in active base-embedding RMS units.
+
+    `base_rms` is a measured scalar from the final prompt-embedding tensor, not a
+    learned norm. Supplying `active_mask` prevents ignored/padded positions from
+    receiving perturbation energy.
+    """
 
     if request.pipeline_class is None:
         raise ValueError("embedding conditioning requires a model pipeline")
@@ -158,20 +166,32 @@ def apply_relative_rms_offset(
     if not np.isfinite(values).all():
         raise ValueError("embedding offset must be finite")
 
-    base_rms_tensor = base.embeddings.float().square().mean().sqrt().clamp_min(1e-6)
-    base_rms = float(base_rms_tensor.item())
+    if active_mask is not None:
+        mask = np.asarray(active_mask, dtype=bool)
+        if mask.shape != expected_shape:
+            raise ValueError("active embedding mask does not match embedding shape")
+        values = np.where(mask, values, 0.0)
+
+    if base_rms is None:
+        base_rms_tensor = base.embeddings.float().square().mean().sqrt().clamp_min(1e-6)
+        measured_base_rms = float(base_rms_tensor.item())
+        scale: Any = base_rms_tensor.to(dtype=base.embeddings.dtype)
+    else:
+        measured_base_rms = float(base_rms)
+        if not math.isfinite(measured_base_rms) or measured_base_rms < 1e-6:
+            raise ValueError("base embedding RMS must be finite and positive")
+        scale = measured_base_rms
+
     tensor = torch_module.as_tensor(
         values,
         device=base.embeddings.device,
         dtype=base.embeddings.dtype,
     )
-    mixed = base.embeddings + tensor.unsqueeze(0) * base_rms_tensor.to(
-        dtype=base.embeddings.dtype
-    )
+    mixed = base.embeddings + tensor.unsqueeze(0) * scale
     adapter = get_conditioning_adapter(request.pipeline_class)
     return (
         adapter.pipeline_kwargs(EncodedPrompt(embeddings=mixed, mask=base.mask)),
-        base_rms,
+        measured_base_rms,
     )
 
 

@@ -4,6 +4,7 @@ import {
   appendCenterStep,
   formatRms,
   nextPointSeed,
+  pathAfterCodecChange,
   popCenterStep,
 } from "../../art_optimizer/static/direction_lab.js";
 
@@ -25,6 +26,15 @@ assert.deepEqual(original, []);
 assert.deepEqual(extended, [step]);
 assert.notEqual(extended[0], step, "the stored path step must be copied");
 assert.deepEqual(popCenterStep(extended), []);
+assert.deepEqual(
+  pathAfterCodecChange(extended, "orthogonal-shell", "orthogonal-shell"),
+  extended,
+);
+assert.deepEqual(
+  pathAfterCodecChange(extended, "orthogonal-shell", "low-rank-shell"),
+  [],
+  "switching point geometry must reset the accumulated walk",
+);
 assert.equal(formatRms(0.4), "0.400×");
 
 console.log("direction-lab browser helpers passed");
