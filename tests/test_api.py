@@ -13,6 +13,7 @@ UI_IDS = {
     "concept-shelf",
     "lane-board",
     "emergent-tastes",
+    "direction-lab",
 }
 
 
@@ -40,6 +41,7 @@ def test_health_models_ui_catalog_and_validation(monkeypatch, tmp_path: Path) ->
         assert health.json()["content_filter_required"] is False
         assert health.json()["ui"] == "experiment-catalog"
         assert "emergent-tastes" in health.json()["treatments"]
+        assert "random-direction-lab" in health.json()["treatments"]
 
         models = client.get("/api/models")
         assert models.status_code == 200
@@ -55,6 +57,28 @@ def test_health_models_ui_catalog_and_validation(monkeypatch, tmp_path: Path) ->
             assert page.status_code == 200
             assert "Art Optimizer" in page.text
         assert client.get("/ui/not-a-real-experiment").status_code == 404
+
+        codecs = client.get("/api/direction-codecs")
+        assert codecs.status_code == 200
+        assert {item["codec_id"] for item in codecs.json()} == {
+            "gaussian-shell",
+            "orthogonal-shell",
+            "low-rank-shell",
+            "antipodal-shell",
+        }
+        unsupported = client.post(
+            "/api/direction-lab/slates",
+            json={
+                "prompt": "a non-string direction test",
+                "image_seed": 10,
+                "point_seed": 20,
+                "codec_id": "orthogonal-shell",
+                "radius": 0.4,
+                "center_path": [],
+            },
+        )
+        assert unsupported.status_code == 409
+        assert "Diffusers model" in unsupported.json()["detail"]
 
         index = client.get("/")
         assert index.status_code == 200
