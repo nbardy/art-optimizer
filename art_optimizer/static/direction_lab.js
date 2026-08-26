@@ -18,6 +18,10 @@ export function popCenterStep(path) {
   return (path || []).slice(0, -1);
 }
 
+export function pathAfterCodecChange(path, currentCodec, nextCodec) {
+  return currentCodec === nextCodec ? [...(path || [])] : [];
+}
+
 export function formatRms(value) {
   return `${Number(value || 0).toFixed(3)}×`;
 }
@@ -138,7 +142,7 @@ function boot() {
     elements.imageSeed.value = String(state.imageSeed);
     elements.pointSeed.value = String(state.pointSeed);
     elements.radius.value = String(state.radius);
-    elements.radiusOutput.textContent = `${state.radius.toFixed(2)}× base RMS`;
+    elements.radiusOutput.textContent = `${state.radius.toFixed(2)}× active base RMS`;
     elements.centerLabel.textContent =
       state.centerPath.length === 0
         ? "Prompt center"
@@ -178,8 +182,22 @@ function boot() {
       input.value = codec.codec_id;
       input.checked = codec.codec_id === state.codecId;
       input.addEventListener("change", () => {
+        const previousCodec = state.codecId;
+        const hadWalk = state.centerPath.length > 0;
+        state.centerPath = pathAfterCodecChange(
+          state.centerPath,
+          previousCodec,
+          codec.codec_id,
+        );
         state.codecId = codec.codec_id;
         state.radius = Number(codec.default_radius);
+        state.selectedCell = null;
+        state.slate = null;
+        elements.grid.replaceChildren();
+        if (hadWalk && previousCodec !== codec.codec_id) {
+          elements.status.textContent =
+            "Point codec changed, so the previous codec walk was reset for a clean comparison.";
+        }
         syncInputs();
         saveState();
       });
@@ -236,6 +254,7 @@ function boot() {
 
   function renderDiagnostics(slate) {
     const diagnostics = slate.diagnostics;
+    const activeFraction = Number(diagnostics.active_embedding_fraction ?? 1);
     const items = [
       ["center offset", formatRms(diagnostics.center_offset_rms_relative_to_base)],
       [
@@ -243,6 +262,8 @@ function boot() {
         formatRms(diagnostics.minimum_pairwise_candidate_rms),
       ],
       ["direction effective rank", Number(diagnostics.direction_effective_rank).toFixed(2)],
+      ["active embedding elements", `${(100 * activeFraction).toFixed(1)}%`],
+      ["RMS metric", diagnostics.rms_metric || "all-elements legacy"],
       ["string axes", diagnostics.string_axes_used ? "yes" : "never"],
     ];
     const fragment = document.createDocumentFragment();
@@ -287,7 +308,7 @@ function boot() {
       renderDiagnostics(slate);
       elements.status.textContent =
         `${slate.codec.label}: same diffusion seed ${slate.image_seed}, ` +
-        `four non-string points at radius ${Number(slate.radius).toFixed(2)}×.`;
+        `four non-string points at active RMS radius ${Number(slate.radius).toFixed(2)}×.`;
       syncInputs();
       saveState();
     } catch (error) {
@@ -318,7 +339,7 @@ function boot() {
   });
   elements.radius.addEventListener("input", () => {
     state.radius = Number(elements.radius.value);
-    elements.radiusOutput.textContent = `${state.radius.toFixed(2)}× base RMS`;
+    elements.radiusOutput.textContent = `${state.radius.toFixed(2)}× active base RMS`;
   });
   elements.newPoints.addEventListener("click", () => {
     state.pointSeed = nextPointSeed(state.pointSeed);
