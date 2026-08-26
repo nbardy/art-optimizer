@@ -148,4 +148,8 @@ def test_applied_offset_preserves_masked_tokens_and_matches_active_radius() -> N
     delta = mixed - values[0]
     np.testing.assert_allclose(mixed[~active_mask], values[0][~active_mask])
     assert measured == 2.0
-    assert np.sqrt(np.mean(np.square(delta[active_mask]))) / measured == np.float64(0.4)
+    assert np.isclose(
+        np.sqrt(np.mean(np.square(delta[active_mask]))) / measured,
+        0.4,
+        atol=1e-6,
+    )
