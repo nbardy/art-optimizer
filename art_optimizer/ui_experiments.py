@@ -58,12 +58,23 @@ _EXPERIMENTS = {
         experiment_id="emergent-tastes",
         label="Emergent tastes",
         description=(
-            "Fixed-root embedding search with chronologically tested latent taste modes "
+            "Fixed-root authored-axis search with chronologically tested latent taste modes "
             "and seed-by-strength taste galleries."
         ),
         filename="emergent.html",
         treatment_id="emergent-tastes",
         concept_controls="emergent",
+    ),
+    "direction-lab": UIExperiment(
+        experiment_id="direction-lab",
+        label="Random Direction Lab",
+        description=(
+            "Four non-string embedding point codecs on an explicit RMS shell, with a fixed "
+            "diffusion seed and an iterative choose-the-new-center workflow."
+        ),
+        filename="direction_lab.html",
+        treatment_id="random-direction-lab",
+        concept_controls="none",
     ),
 }
 
