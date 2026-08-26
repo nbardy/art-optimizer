@@ -8,16 +8,24 @@ import os
 import threading
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 
 from .embedding_conditioning import (
     EmbeddingDirectionBank,
+    EncodedPrompt,
     apply_direction_bank,
+    apply_relative_rms_offset,
     build_direction_bank,
+    encode_base_prompt,
 )
 from .model_codec import SemanticDirectionCodec
+from .random_embedding_codec import (
+    EmbeddingPathStep,
+    candidate_offsets,
+    get_random_embedding_codec,
+)
 from .rendering import (
     RenderedArtifact,
     RendererCapabilities,
@@ -93,7 +101,7 @@ class LocalDiffusersRenderer:
                 "choose prompt or embedding"
             )
         self.action_dimension = codec.action_dimension
-        self.revision = f"local-diffusers/{self.profile.model_id}/v2"
+        self.revision = f"local-diffusers/{self.profile.model_id}/v3"
         self.codec_revision = codec.profile.codec_revision
         self.control_basis_revision = codec.profile.control_basis_revision
         if (pipeline is None) != (torch_module is None):
@@ -105,6 +113,8 @@ class LocalDiffusersRenderer:
         self._lock = threading.Lock()
         self._bank_cache: OrderedDict[str, EmbeddingDirectionBank] = OrderedDict()
         self._bank_cache_size = 2
+        self._base_cache: OrderedDict[str, EncodedPrompt] = OrderedDict()
+        self._base_cache_size = 4
 
     def capabilities(self) -> RendererCapabilities:
         return RendererCapabilities(
@@ -178,8 +188,7 @@ class LocalDiffusersRenderer:
 
         with self._lock:
             pipeline, torch = self._load_pipeline()
-            generator_device = "cpu" if self.cpu_offload or self.device == "mps" else self.device
-            generator = torch.Generator(device=generator_device).manual_seed(request.seed)
+            generator = self._generator(torch, request.seed)
             with torch.inference_mode():
                 if self.conditioning_mode == "embedding":
                     conditioning = self._embedding_kwargs(pipeline, request, values)
@@ -200,6 +209,136 @@ class LocalDiffusersRenderer:
             request_digest=request_hash,
             metadata=request_payload,
         )
+
+    def render_embedding_slate(
+        self,
+        *,
+        design_ids: Sequence[str],
+        image_seed: int,
+        prompt: str,
+        codec_id: str,
+        point_seed: int,
+        radius: float,
+        center_steps: Sequence[EmbeddingPathStep],
+    ) -> dict[str, object]:
+        """Render four non-string points on a declared shell around one prompt embedding."""
+
+        if self.conditioning_mode != "embedding":
+            raise NotImplementedError(
+                "random embedding slates require embedding conditioning"
+            )
+        if len(design_ids) != 4 or len(set(design_ids)) != 4:
+            raise ValueError("random embedding slates require four unique design IDs")
+        profile = get_random_embedding_codec(codec_id)
+        request = self.codec.compile(
+            base_prompt=prompt,
+            action=np.zeros(self.action_dimension, dtype=np.float64),
+            seed=image_seed,
+            size=self.size,
+            model_source=self.model_source,
+        )
+
+        with self._lock:
+            pipeline, torch = self._load_pipeline()
+            base = self._base_prompt(pipeline, request)
+            embedding_shape = tuple(int(item) for item in base.embeddings.shape[1:])
+            offsets, diagnostics = candidate_offsets(
+                embedding_shape,
+                codec_id=codec_id,
+                point_seed=point_seed,
+                radius=radius,
+                center_steps=center_steps,
+            )
+            base_rms = float(
+                base.embeddings.float().square().mean().sqrt().clamp_min(1e-6).item()
+            )
+            artifacts: list[RenderedArtifact] = []
+            candidate_rms = diagnostics["candidate_offset_rms_relative_to_base"]
+            for index, (design_id, offset) in enumerate(
+                zip(design_ids, offsets, strict=True)
+            ):
+                validate_render_input(
+                    design_id=design_id,
+                    seed=image_seed,
+                    action=np.zeros(self.action_dimension),
+                    action_dimension=self.action_dimension,
+                )
+                offset32 = np.asarray(offset, dtype="<f4")
+                offset_digest = hashlib.sha256(offset32.tobytes()).hexdigest()
+                request_payload = {
+                    "schema": "random-embedding-render/v1",
+                    "model_id": request.model_id,
+                    "model_source": request.model_source,
+                    "pipeline_class": request.pipeline_class,
+                    "renderer_revision": self.revision,
+                    "codec_revision": request.codec_revision,
+                    "conditioning_mode": "embedding",
+                    "random_embedding_codec": profile.codec_id,
+                    "random_embedding_codec_revision": profile.revision,
+                    "point_seed": point_seed,
+                    "candidate_index": index,
+                    "radius_relative_to_base_rms": float(radius),
+                    "candidate_offset_rms_relative_to_base": float(candidate_rms[index]),
+                    "center_steps": [step.public_metadata() for step in center_steps],
+                    "offset_digest": offset_digest,
+                    "base_embedding_rms": base_rms,
+                    "model_revision": self.model_revision,
+                    "diffusers_version": self.diffusers_version,
+                    "torch_version": self.torch_version,
+                    "prompt": request.base_prompt,
+                    "image_seed": image_seed,
+                    "width": request.width,
+                    "height": request.height,
+                    "steps": request.steps,
+                    "guidance_scale": request.guidance_scale,
+                    "dtype": self.dtype,
+                }
+                request_hash = render_request_digest(request_payload)
+                path = self.artifacts_dir / f"{design_id}.png"
+                cached = load_cached_artifact(path, request_hash)
+                if cached is not None:
+                    artifacts.append(cached)
+                    continue
+
+                conditioning, measured_base_rms = apply_relative_rms_offset(
+                    request,
+                    base,
+                    offset,
+                    torch,
+                )
+                if not np.isclose(measured_base_rms, base_rms, rtol=1e-6, atol=1e-8):
+                    raise RuntimeError("base embedding RMS changed during one slate")
+                generator = self._generator(torch, image_seed)
+                with torch.inference_mode():
+                    output = pipeline(
+                        **conditioning,
+                        height=request.height,
+                        width=request.width,
+                        num_inference_steps=request.steps,
+                        guidance_scale=request.guidance_scale,
+                        generator=generator,
+                    )
+                image = output.images[0].convert("RGB")
+                artifacts.append(
+                    save_rendered_artifact(
+                        image,
+                        path,
+                        request_digest=request_hash,
+                        metadata=request_payload,
+                    )
+                )
+
+        return {
+            "artifacts": artifacts,
+            "candidate_offsets": candidate_rms,
+            "diagnostics": {
+                **diagnostics,
+                "embedding_shape": list(embedding_shape),
+                "base_embedding_rms": base_rms,
+                "all_candidates_share_image_seed": True,
+                "string_axes_used": False,
+            },
+        }
 
     def _embedding_kwargs(
         self,
@@ -223,6 +362,28 @@ class LocalDiffusersRenderer:
         else:
             self._bank_cache.move_to_end(key)
         return apply_direction_bank(request, bank, action)
+
+    def _base_prompt(self, pipeline: Any, request: Any) -> EncodedPrompt:
+        key = hashlib.sha256(
+            (
+                f"{request.model_source}\0{self.model_revision}\0"
+                f"{request.codec_revision}\0{request.base_prompt}"
+            ).encode("utf-8")
+        ).hexdigest()
+        encoded = self._base_cache.get(key)
+        if encoded is None:
+            encoded = encode_base_prompt(pipeline, request)
+            self._base_cache[key] = encoded
+            self._base_cache.move_to_end(key)
+            while len(self._base_cache) > self._base_cache_size:
+                self._base_cache.popitem(last=False)
+        else:
+            self._base_cache.move_to_end(key)
+        return encoded
+
+    def _generator(self, torch: Any, seed: int) -> Any:
+        generator_device = "cpu" if self.cpu_offload or self.device == "mps" else self.device
+        return torch.Generator(device=generator_device).manual_seed(seed)
 
     def _load_pipeline(self) -> tuple[Any, Any]:
         if self._pipeline is not None and self._torch is not None:
