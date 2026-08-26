@@ -152,6 +152,7 @@ def sample_unit_shell_directions(
     if profile.codec_id == "low-rank-shell":
         if len(normalized_shape) == 1:
             directions = rng.standard_normal((candidate_count, *normalized_shape))
+            directions = _remove_constant_mode(directions)
         else:
             token_count = int(np.prod(normalized_shape[:-1]))
             channel_count = normalized_shape[-1]
@@ -159,10 +160,10 @@ def sample_unit_shell_directions(
             directions = np.empty((candidate_count, token_count, channel_count), dtype=np.float64)
             for index in range(candidate_count):
                 token_factors = rng.standard_normal((token_count, rank))
+                token_factors -= token_factors.mean(axis=0, keepdims=True)
                 channel_factors = rng.standard_normal((rank, channel_count))
                 directions[index] = token_factors @ channel_factors / math.sqrt(rank)
             directions = directions.reshape((candidate_count, *normalized_shape))
-        directions = _remove_constant_mode(directions)
         return _normalize_rms(directions)
 
     if profile.codec_id == "antipodal-shell":
