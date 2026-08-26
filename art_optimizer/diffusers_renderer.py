@@ -20,12 +20,13 @@ from .embedding_conditioning import (
     build_direction_bank,
     encode_base_prompt,
 )
-from .model_codec import SemanticDirectionCodec
-from .random_embedding_codec import (
-    EmbeddingPathStep,
-    candidate_offsets,
-    get_random_embedding_codec,
+from .embedding_metric import (
+    RMS_METRIC_REVISION,
+    active_candidate_offsets,
+    active_embedding_metric,
 )
+from .model_codec import SemanticDirectionCodec
+from .random_embedding_codec import EmbeddingPathStep, get_random_embedding_codec
 from .rendering import (
     RenderedArtifact,
     RendererCapabilities,
@@ -101,7 +102,7 @@ class LocalDiffusersRenderer:
                 "choose prompt or embedding"
             )
         self.action_dimension = codec.action_dimension
-        self.revision = f"local-diffusers/{self.profile.model_id}/v3"
+        self.revision = f"local-diffusers/{self.profile.model_id}/v4"
         self.codec_revision = codec.profile.codec_revision
         self.control_basis_revision = codec.profile.control_basis_revision
         if (pipeline is None) != (torch_module is None):
@@ -221,7 +222,7 @@ class LocalDiffusersRenderer:
         radius: float,
         center_steps: Sequence[EmbeddingPathStep],
     ) -> dict[str, object]:
-        """Render four non-string points on a declared shell around one prompt embedding."""
+        """Render four non-string points on an active-token RMS shell."""
 
         if self.conditioning_mode != "embedding":
             raise NotImplementedError(
@@ -242,15 +243,14 @@ class LocalDiffusersRenderer:
             pipeline, torch = self._load_pipeline()
             base = self._base_prompt(pipeline, request)
             embedding_shape = tuple(int(item) for item in base.embeddings.shape[1:])
-            offsets, diagnostics = candidate_offsets(
+            active_mask, base_rms = active_embedding_metric(base)
+            offsets, diagnostics = active_candidate_offsets(
                 embedding_shape,
                 codec_id=codec_id,
                 point_seed=point_seed,
                 radius=radius,
                 center_steps=center_steps,
-            )
-            base_rms = float(
-                base.embeddings.float().square().mean().sqrt().clamp_min(1e-6).item()
+                active_mask=active_mask,
             )
             artifacts: list[RenderedArtifact] = []
             candidate_rms = diagnostics["candidate_offset_rms_relative_to_base"]
@@ -266,7 +266,7 @@ class LocalDiffusersRenderer:
                 offset32 = np.asarray(offset, dtype="<f4")
                 offset_digest = hashlib.sha256(offset32.tobytes()).hexdigest()
                 request_payload = {
-                    "schema": "random-embedding-render/v1",
+                    "schema": "random-embedding-render/v2",
                     "model_id": request.model_id,
                     "model_source": request.model_source,
                     "pipeline_class": request.pipeline_class,
@@ -275,6 +275,9 @@ class LocalDiffusersRenderer:
                     "conditioning_mode": "embedding",
                     "random_embedding_codec": profile.codec_id,
                     "random_embedding_codec_revision": profile.revision,
+                    "rms_metric": RMS_METRIC_REVISION,
+                    "active_embedding_elements": diagnostics["active_embedding_elements"],
+                    "total_embedding_elements": diagnostics["total_embedding_elements"],
                     "point_seed": point_seed,
                     "candidate_index": index,
                     "radius_relative_to_base_rms": float(radius),
@@ -305,6 +308,8 @@ class LocalDiffusersRenderer:
                     base,
                     offset,
                     torch,
+                    active_mask=active_mask,
+                    base_rms=base_rms,
                 )
                 if not np.isclose(measured_base_rms, base_rms, rtol=1e-6, atol=1e-8):
                     raise RuntimeError("base embedding RMS changed during one slate")
